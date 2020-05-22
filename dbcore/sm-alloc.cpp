@@ -14,6 +14,11 @@
 namespace ermia {
 namespace MM {
 
+//for HYU
+uint64_t max_vclen = 0;
+//uint64_t last_clsn = 0;
+
+
 // tzwang (2015-11-01):
 // gc_lsn is the LSN of the no-longer-needed versions, which is the end LSN
 // of the epoch that most recently reclaimed (i.e., all **readers** are gone).
@@ -54,7 +59,7 @@ thread_local TlsFreeObjectPool *tls_free_object_pool CACHE_ALIGNED;
 char **node_memory = nullptr;
 uint64_t *allocated_node_memory = nullptr;
 static uint64_t thread_local tls_allocated_node_memory CACHE_ALIGNED;
-static const uint64_t tls_node_memory_mb = 200;
+static const uint64_t tls_node_memory_mb = 200; //default is 200
 
 void prepare_node_memory() {
   ALWAYS_ASSERT(config::numa_nodes);
@@ -88,6 +93,7 @@ void prepare_node_memory() {
 void gc_version_chain(fat_ptr *oid_entry) {
   fat_ptr ptr = *oid_entry;
   Object *cur_obj = (Object *)ptr.offset();
+	uint64_t vc_length = 0;
   if (!cur_obj) {
     // Tuple is deleted, skip
     return;
@@ -120,6 +126,7 @@ void gc_version_chain(fat_ptr *oid_entry) {
       // Might already got recycled, give up
       break;
     }
+
     ptr = cur_obj->GetNextVolatile();
     prev_next = cur_obj->GetNextVolatilePtr();
     // If the chkpt needs to be a consistent one, must make sure not to GC a
@@ -132,6 +139,13 @@ void gc_version_chain(fat_ptr *oid_entry) {
     // grabs the latest committed version directly. Log replay after the
     // chkpt-start lsn is necessary for correctness.
     uint64_t glsn = volatile_read(gc_lsn);
+		//uint64_t lclsn = volatile_read(last_clsn);
+
+		// HYU
+		if (cur_obj->HYU_gc_candidate_clsn_ == glsn) {
+			break;
+		}
+
     if (LSN::from_ptr(clsn).offset() <= glsn && ptr._ptr) {
       // Fast forward to the **second** version < gc_lsn. Consider that we set
       // safesnap lsn to 1.8, and gc_lsn to 1.6. Assume we have two versions
@@ -144,6 +158,7 @@ void gc_version_chain(fat_ptr *oid_entry) {
       // one guy possibly doing this for a version chain - just blind write. If
       // we're traversing at other times, e.g., after committed, then a CAS is
       // needed: __sync_bool_compare_and_swap(&prev_next->_ptr, ptr._ptr, 0)
+
       volatile_write(prev_next->_ptr, 0);
       while (ptr.offset()) {
         cur_obj = (Object *)ptr.offset();
@@ -159,6 +174,7 @@ void gc_version_chain(fat_ptr *oid_entry) {
         tls_free_object_pool->Put(ptr);
         ptr = next_ptr;
       }
+
       break;
     }
   }

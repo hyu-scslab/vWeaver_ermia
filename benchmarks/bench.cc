@@ -4,6 +4,8 @@
 #include <vector>
 #include <utility>
 #include <string>
+#include <string.h>
+#include <stdio.h>
 
 #include <stdlib.h>
 #include <sched.h>
@@ -23,6 +25,7 @@
 #include "../dbcore/sm-log-recover-impl.h"
 #include "../dbcore/sm-rep.h"
 
+uint64_t Q2_count = 0;
 volatile bool running = true;
 std::vector<bench_worker *> bench_runner::workers;
 std::vector<bench_worker *> bench_runner::cmdlog_redoers;
@@ -109,14 +112,28 @@ bool bench_worker::finish_workload(rc_t ret, uint32_t workload_idx, util::timer 
 
 void bench_worker::MyWork(char *) {
   if (is_worker) {
+		bool start_flag = false;
     workload = get_workload();
     txn_counts.resize(workload.size());
     barrier_a->count_down();
     barrier_b->wait_for();
     while (running) {
+			if (get_worker_id() == ermia::config::worker_threads) {
+				//printf("hi i'm worker %d\n", get_worker_id());
+				if (start_flag == false) {
+					do_workload_function(5);
+					//start_flag = true;
+				}
+				continue;
+			}
+
       double d = r.next_uniform();
       for (size_t i = 0; i < workload.size(); i++) {
         if ((i + 1) == workload.size() || d < workload[i].frequency) {
+					if (!workload[i].name.compare("Query2")) {
+						//__sync_fetch_and_add(&Q2_count, 1);
+						break;
+					}
           do_workload_function(i);
           break;
         }
@@ -349,6 +366,7 @@ void bench_runner::measure_read_view_lsn() {
 }
 
 void bench_runner::start_measurement() {
+	FILE* fp = fopen("throughput.data", "a+");
   workers = make_workers();
   ALWAYS_ASSERT(!workers.empty());
   for (std::vector<bench_worker *>::const_iterator it = workers.begin();
@@ -446,6 +464,7 @@ void bench_runner::start_measurement() {
       printf("%lu,%lu,%lu,%.2f%%\n", slept + 1, sec_commits, sec_aborts, sec_util);
     } else {
       printf("%lu,%lu,%lu\n", slept + 1, sec_commits, sec_aborts);
+      //fprintf(fp, "%lu,%lu,%lu\n", slept + 1, sec_commits, sec_aborts);
     }
     slept++;
   };
@@ -629,6 +648,7 @@ void bench_runner::start_measurement() {
          << " system aborts/s\t" << std::get<3>(c.second) / (double)elapsed_sec
          << " user aborts/s\n";
   }
+	fclose(fp);
   std::cout.flush();
 }
 

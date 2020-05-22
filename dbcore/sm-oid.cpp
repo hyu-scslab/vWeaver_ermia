@@ -18,7 +18,6 @@
 #include "sm-oid-impl.h"
 
 namespace ermia {
-
 sm_oid_mgr *oidmgr = NULL;
 
 struct thread_data {
@@ -759,6 +758,9 @@ install:
   ASSERT(new_obj_ptr->asi_type() == 0);
   Object *new_object = (Object *)new_obj_ptr->offset();
   new_object->SetClsn(updater_xc->owner.to_ptr());
+	// HYU_GC
+	new_object->HYU_gc_candidate_clsn_ = volatile_read(MM::gc_lsn);
+	// HYU_GC end
   if (overwrite) {
     new_object->SetNextPersistent(old_desc->GetNextPersistent());
     new_object->SetNextVolatile(old_desc->GetNextVolatile());
@@ -775,6 +777,11 @@ install:
     new_object->SetNextVolatile(head);
     if (__sync_bool_compare_and_swap(&ptr->_ptr, head._ptr,
                                      new_obj_ptr->_ptr)) {
+#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+			// In this case, we have to set highway shortcut
+			new_object->TossCoin(updater_xc->owner._val);
+#endif /* HYU_ZIGZAG */
+
       // Succeeded installing a new version, now only I can modify the
       // chain, try recycle some objects
       if (config::enable_gc) {

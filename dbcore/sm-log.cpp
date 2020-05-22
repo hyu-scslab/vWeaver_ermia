@@ -189,4 +189,9 @@ void sm_log::wait_for_durable_flushed_lsn_offset(uint64_t offset) {
   auto *self = get_impl(this);
   self->_lm.wait_for_durable(offset);
 }
+
+void sm_log::log_debug() {
+	return;
+}
+
 }  // namespace ermia

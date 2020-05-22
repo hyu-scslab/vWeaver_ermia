@@ -12,6 +12,7 @@
 extern void ycsb_do_test(ermia::Engine *db, int argc, char **argv);
 extern void tpcc_do_test(ermia::Engine *db, int argc, char **argv);
 extern void tpce_do_test(ermia::Engine *db, int argc, char **argv);
+extern uint64_t Q2_count;
 
 enum { RUNMODE_TIME = 0, RUNMODE_OPS = 1 };
 
@@ -147,6 +148,8 @@ class bench_worker : public ermia::thread::Runner {
   inline void inc_ntxn_int_aborts() { ++ntxn_int_aborts; }
   inline void inc_ntxn_phantom_aborts() { ++ntxn_phantom_aborts; }
   inline void inc_ntxn_query_commits() { ++ntxn_query_commits; }
+	// for HYU
+	inline unsigned int get_worker_id() { return worker_id; }
 
   inline uint64_t get_latency_numer_us() const {
     return ermia::volatile_read(latency_numer_us);
@@ -207,7 +210,7 @@ class bench_runner {
 
   bench_runner(ermia::Engine *db)
       : db(db),
-        barrier_a(ermia::config::worker_threads),
+        barrier_a(ermia::config::worker_threads + 1),		// default worker_threads
         barrier_b(ermia::config::worker_threads > 0 ? 1 : 0) {}
   virtual ~bench_runner() {}
   virtual void prepare(char *) = 0;

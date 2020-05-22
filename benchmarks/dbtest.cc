@@ -23,13 +23,13 @@ DEFINE_bool(verbose, true, "Verbose mode.");
 DEFINE_string(benchmark, "tpcc", "Benchmark name: tpcc, tpce, or ycsb");
 DEFINE_string(benchmark_options, "", "Benchmark-specific opetions.");
 DEFINE_uint64(threads, 1, "Number of worker threads to run transactions.");
-DEFINE_uint64(node_memory_gb, 12, "GBs of memory to allocate per node.");
+DEFINE_uint64(node_memory_gb, 150, "GBs of memory to allocate per node."); //default is 12
 DEFINE_bool(numa_spread, false, "Whether to pin threads in spread mode (compact if false)");
 DEFINE_string(tmpfs_dir, "/dev/shm",
               "Path to a tmpfs location. Used by log buffer.");
 DEFINE_string(log_data_dir, "/tmpfs/ermia-log", "Log directory.");
 DEFINE_uint64(log_segment_mb, 8192, "Log segment size in MB.");
-DEFINE_uint64(log_buffer_mb, 16, "Log buffer size in MB.");
+DEFINE_uint64(log_buffer_mb, 128, "Log buffer size in MB.");
 DEFINE_bool(log_ship_by_rdma, false, "Whether to use RDMA for log shipping.");
 DEFINE_bool(phantom_prot, false, "Whether to enable phantom protection.");
 DEFINE_uint64(read_view_stat_interval_ms, 0,
@@ -69,7 +69,7 @@ DEFINE_string(
     "eager - load everything to memory during recovery.");
 DEFINE_bool(enable_chkpt, false, "Whether to enable checkpointing.");
 DEFINE_uint64(chkpt_interval, 10, "Checkpoint interval in seconds.");
-DEFINE_bool(null_log_device, false, "Whether to skip writing log records.");
+DEFINE_bool(null_log_device, false, "Whether to skip writing log records."); //default false
 DEFINE_bool(
     truncate_at_bench_start, false,
     "Whether truncate the log/chkpt file written before starting benchmark (save tmpfs space).");
@@ -154,6 +154,7 @@ int main(int argc, char **argv) {
   std::cerr << "WARNING: benchmark built in DEBUG mode!!!" << std::endl;
 #endif
   std::cerr << "PID: " << getpid() << std::endl;
+	sleep(10);
 
   google::InitGoogleLogging(argv[0]);
   google::ParseCommandLineFlags(&argc, &argv, true);

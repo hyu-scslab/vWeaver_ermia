@@ -4,7 +4,10 @@
 #include "sm-common.h"
 #include "../varstr.h"
 
+
 namespace ermia {
+
+#define MAX_LEVEL (255)
 
 struct dbtuple;
 class sm_log_recover_mgr;
@@ -40,6 +43,24 @@ class Object {
   // commit. size_code refers to the whole object including header
   fat_ptr clsn_;
 
+#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+	// highwat pointer in version chain
+	fat_ptr highway_;
+
+	// copy of highwat version's clsn
+	fat_ptr highway_clsn_;
+
+	// next-key shortcut for ZIGZAG
+	fat_ptr left_shortcut_;
+
+	// level of version
+	uint8_t lv_;
+
+	// level of highway version
+	uint8_t highway_lv_;
+#endif /* HYU_ZIGZAG */
+
+
  public:
   static fat_ptr Create(const varstr* tuple_value, bool do_write,
                         epoch_num epoch);
@@ -50,7 +71,8 @@ class Object {
         pdest_(NULL_PTR),
         next_pdest_(NULL_PTR),
         next_volatile_(NULL_PTR),
-        clsn_(NULL_PTR) {}
+        clsn_(NULL_PTR),
+				HYU_gc_candidate_clsn_(0) {}
 
   Object(fat_ptr pdest, fat_ptr next, epoch_num e, bool in_memory)
       : alloc_epoch_(e),
@@ -58,7 +80,8 @@ class Object {
         pdest_(pdest),
         next_pdest_(next),
         next_volatile_(NULL_PTR),
-        clsn_(NULL_PTR) {}
+        clsn_(NULL_PTR),
+				HYU_gc_candidate_clsn_(0) {}
 
   inline bool IsDeleted() { return status_ == kStatusDeleted; }
   inline bool IsInMemory() { return status_ == kStatusMemory; }
@@ -89,8 +112,20 @@ class Object {
     }
     return (dbtuple*)GetPayload();
   }
+#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+	inline int TossCoin(uint64_t seed) {
+		seed ^= seed >> 12;
+		seed ^= seed << 25;
+		seed ^= seed >> 27;
+
+		return (seed * 2685821657736338717ULL) % 2;
+	}
+#endif /* HYU_ZIGZAG */
   fat_ptr GenerateClsnPtr(uint64_t clsn);
   void Pin(
       bool load_from_logbuf = false);  // Make sure the payload is in memory
+	
+	// HYU_GC
+	uint64_t HYU_gc_candidate_clsn_;
 };
 }  // namespace ermia

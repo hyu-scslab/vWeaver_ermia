@@ -19,6 +19,12 @@ static thread_local char LOG_ALIGN tls_log_space[sizeof(ermia::sm_tx_log_impl)];
 static thread_local bool tls_log_space_used = false;
 
 static ermia::sm_tx_log_impl *get_log_impl(ermia::sm_tx_log *x) {
+	if (x != (void *)tls_log_space) {
+		std::cerr << "x: " << x << std::endl;
+		std::cerr << "tls_log_space: " << (void *)tls_log_space << std::endl;
+		if (tls_log_space_used == false)
+			std::cerr << "tls_log_space is not used" << std::endl;
+	}
   DIE_IF(
       x != (void *)tls_log_space,
       "sm_tx_log object can only be safely used by the thread that created it");
@@ -42,6 +48,7 @@ void sm_tx_log::log_insert(FID f, OID o, fat_ptr ptr, int abits,
 
 void sm_tx_log::log_update(FID f, OID o, fat_ptr ptr, int abits,
                            fat_ptr *pdest) {
+	//std::cerr << "sm_tx_log: " << this << std::endl;
   get_log_impl(this)->add_payload_request(LOG_UPDATE, f, o, ptr, abits, pdest);
 }
 

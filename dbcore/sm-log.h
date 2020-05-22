@@ -403,6 +403,7 @@ struct sm_log {
   sm_log_recover_impl *get_backup_replay_functor();
   int open_segment_for_read(segment_id *sid);
   void dequeue_committed_xcts(uint64_t upto, uint64_t end_time);
+	void log_debug();
 
   virtual ~sm_log() {}
 

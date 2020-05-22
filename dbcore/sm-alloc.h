@@ -52,6 +52,7 @@ typedef epoch_mgr::epoch_num epoch_num;
 namespace MM {
 void gc_version_chain(fat_ptr *oid_entry);
 
+extern uint64_t gc_lsn;
 extern epoch_num gc_epoch;
 
 // A hashtab storing recycled (freed) objects by size. No CC.

@@ -81,6 +81,15 @@ void transaction::initialize_read_write() {
   // SI - see if it's read only. If so, skip logging etc.
   RCU::rcu_enter();
   log = (flags & TXN_FLAG_READ_ONLY) ? nullptr : logmgr->new_tx_log();
+	/*if (flags & TXN_FLAG_READ_ONLY) {
+		std::cerr << "read only txn" << std::endl;
+		if (flags & TXN_FLAG_READ_MOSTLY) {
+			std::cerr << "but read mostly txn" << std::endl;
+			log = logmgr->new_tx_log();
+			std::cerr << "txn read mostly init log: " << log << std::endl;
+		}
+		logmgr->log_debug();
+	}*/
   xc->begin = logmgr->cur_lsn().offset() + 1;
 #endif
 }

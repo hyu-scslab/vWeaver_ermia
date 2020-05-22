@@ -126,6 +126,8 @@ protected:
   // expected public overrides
 
   inline str_arena &string_allocator() { return *sa; }
+	// for test HYU
+	inline sm_tx_log* GetLog() { return log; }
 
 #if defined(SSN) || defined(SSI) || defined(MVOCC)
   inline read_set_t &GetReadSet() {

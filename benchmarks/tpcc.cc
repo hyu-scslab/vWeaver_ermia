@@ -16,6 +16,8 @@
 #include <set>
 #include <vector>
 
+#include <stdio.h>
+
 #include "../dbcore/sm-cmd-log.h"
 
 #include "bench.h"
@@ -48,7 +50,7 @@ static int g_wh_temperature = 0;
 static uint g_microbench_rows = 10;  // this many rows
 // can't have both ratio and rows at the same time
 static int g_microbench_wr_rows = 0;  // this number of rows to write
-static int g_nr_suppliers = 10000;
+static int g_nr_suppliers = 10000; //default is 10000
 
 // how much % of time a worker should use a random home wh
 // 0 - always use home wh
@@ -2135,141 +2137,170 @@ rc_t tpcc_worker::txn_stock_level() {
 }
 
 rc_t tpcc_worker::txn_query2() {
+  //ermia::transaction *txn =
+  //    db->NewTransaction(ermia::transaction::TXN_FLAG_READ_MOSTLY, arena, txn_buf());
   ermia::transaction *txn =
-      db->NewTransaction(ermia::transaction::TXN_FLAG_READ_MOSTLY, arena, txn_buf());
-  ermia::scoped_str_arena s_arena(arena);
+      db->NewTransaction(0, arena, txn_buf());
+	FILE* lfp = fopen("latency.data", "a+");
+	struct timeval start_tv, end_tv, latency_tv;
+	long start_latency_time;
+	int time_count = 1;
+	gettimeofday(&start_tv, 0);
+	gettimeofday(&latency_tv, 0);
+	start_latency_time = latency_tv.tv_sec;
+	
+	while (1) {
+		util::timer t;
 
-  static thread_local tpcc_table_scanner r_scanner(&arena);
-  r_scanner.clear();
-  const region::key k_r_0(0);
-  const region::key k_r_1(5);
-  TryCatch(tbl_region(1)->Scan(txn, Encode(str(sizeof(k_r_0)), k_r_0),
-                                &Encode(str(sizeof(k_r_1)), k_r_1), r_scanner,
-                                s_arena.get()));
-  ALWAYS_ASSERT(r_scanner.output.size() == 5);
+		ermia::scoped_str_arena s_arena(arena);
+		
+		static thread_local tpcc_table_scanner r_scanner(&arena);
+		r_scanner.clear();
+		const region::key k_r_0(0);
+		const region::key k_r_1(5);
+		TryCatch(tbl_region(1)->Scan(txn, Encode(str(sizeof(k_r_0)), k_r_0),
+																	&Encode(str(sizeof(k_r_1)), k_r_1), r_scanner,
+																	s_arena.get()));
+		ALWAYS_ASSERT(r_scanner.output.size() == 5);
 
-  static thread_local tpcc_table_scanner n_scanner(&arena);
-  n_scanner.clear();
-  const nation::key k_n_0(0);
-  const nation::key k_n_1(std::numeric_limits<int32_t>::max());
-  TryCatch(tbl_nation(1)->Scan(txn, Encode(str(sizeof(k_n_0)), k_n_0),
-                                &Encode(str(sizeof(k_n_1)), k_n_1), n_scanner,
-                                s_arena.get()));
-  ALWAYS_ASSERT(n_scanner.output.size() == 62);
+		static thread_local tpcc_table_scanner n_scanner(&arena);
+		n_scanner.clear();
+		const nation::key k_n_0(0);
+		const nation::key k_n_1(std::numeric_limits<int32_t>::max());
+		TryCatch(tbl_nation(1)->Scan(txn, Encode(str(sizeof(k_n_0)), k_n_0),
+																	&Encode(str(sizeof(k_n_1)), k_n_1), n_scanner,
+																	s_arena.get()));
+		ALWAYS_ASSERT(n_scanner.output.size() == 62);
 
-  // Pick a target region
-  auto target_region = RandomNumber(r, 0, 4);
-  //	auto target_region = 3;
-  ALWAYS_ASSERT(0 <= target_region and target_region <= 4);
+		// Pick a target region
+		auto target_region = RandomNumber(r, 0, 4);
+		//	auto target_region = 3;
+		ALWAYS_ASSERT(0 <= target_region and target_region <= 4);
 
-  // Scan region
-  for (auto &r_r : r_scanner.output) {
-    region::key k_r_temp;
-    region::value v_r_temp;
-    const region::key *k_r = Decode(*r_r.first, k_r_temp);
-    const region::value *v_r = Decode(*r_r.second, v_r_temp);
+		// Scan region
+		for (auto &r_r : r_scanner.output) {
+			region::key k_r_temp;
+			region::value v_r_temp;
+			const region::key *k_r = Decode(*r_r.first, k_r_temp);
+			const region::value *v_r = Decode(*r_r.second, v_r_temp);
 
-    // filtering region
-    if (v_r->r_name != std::string(regions[target_region])) continue;
+			// filtering region
+			if (v_r->r_name != std::string(regions[target_region])) continue;
 
-    // Scan nation
-    for (auto &r_n : n_scanner.output) {
-      nation::key k_n_temp;
-      nation::value v_n_temp;
-      const nation::key *k_n = Decode(*r_n.first, k_n_temp);
-      const nation::value *v_n = Decode(*r_n.second, v_n_temp);
+			// Scan nation
+			for (auto &r_n : n_scanner.output) {
+				nation::key k_n_temp;
+				nation::value v_n_temp;
+				const nation::key *k_n = Decode(*r_n.first, k_n_temp);
+				const nation::value *v_n = Decode(*r_n.second, v_n_temp);
 
-      // filtering nation
-      if (k_r->r_regionkey != v_n->n_regionkey) continue;
+				// filtering nation
+				if (k_r->r_regionkey != v_n->n_regionkey) continue;
 
-      // Scan suppliers
-      for (auto i = 0; i < g_nr_suppliers; i++) {
-        const supplier::key k_su(i);
-        supplier::value v_su_tmp;
-        ermia::varstr valptr;
+				// Scan suppliers
+				for (auto i = 0; i < g_nr_suppliers; i++) {
+					const supplier::key k_su(i);
+					supplier::value v_su_tmp;
+					ermia::varstr valptr;
 
-        rc_t rc = rc_t{RC_INVALID};
-        tbl_supplier(1)->Get(txn, rc, Encode(str(Size(k_su)), k_su), valptr);
-        TryVerifyRelaxed(rc);
+					rc_t rc = rc_t{RC_INVALID};
+					tbl_supplier(1)->Get(txn, rc, Encode(str(Size(k_su)), k_su), valptr);
+					TryVerifyRelaxed(rc);
 
-        const supplier::value *v_su = Decode(valptr, v_su_tmp);
+					const supplier::value *v_su = Decode(valptr, v_su_tmp);
 
-        // Filtering suppliers
-        if (k_n->n_nationkey != v_su->su_nationkey) continue;
+					// Filtering suppliers
+					if (k_n->n_nationkey != v_su->su_nationkey) continue;
 
-        // aggregate - finding a stock tuple having min. stock level
-        stock::key min_k_s(0, 0);
-        stock::value min_v_s(0, 0, 0, 0);
+					// aggregate - finding a stock tuple having min. stock level
+					stock::key min_k_s(0, 0);
+					stock::value min_v_s(0, 0, 0, 0);
 
-        int16_t min_qty = std::numeric_limits<int16_t>::max();
-        for (auto &it : supp_stock_map
-                 [k_su.su_suppkey])  // already know
-                                     // "mod((s_w_id*s_i_id),10000)=su_suppkey"
-                                     // items
-        {
-          const stock::key k_s(it.first, it.second);
-          stock::value v_s_tmp(0, 0, 0, 0);
-          rc = rc_t{RC_INVALID};
-          tbl_stock(it.first)->Get(txn, rc, Encode(str(Size(k_s)), k_s), valptr);
-          TryVerifyRelaxed(rc);
-          const stock::value *v_s = Decode(valptr, v_s_tmp);
+					int16_t min_qty = std::numeric_limits<int16_t>::max();
+					for (auto &it : supp_stock_map
+									 [k_su.su_suppkey])  // already know
+																			 // "mod((s_w_id*s_i_id),10000)=su_suppkey"
+																			 // items
+					{
+						const stock::key k_s(it.first, it.second);
+						stock::value v_s_tmp(0, 0, 0, 0);
+						rc = rc_t{RC_INVALID};
+						tbl_stock(it.first)->Get(txn, rc, Encode(str(Size(k_s)), k_s), valptr);
+						TryVerifyRelaxed(rc);
+						const stock::value *v_s = Decode(valptr, v_s_tmp);
 
-          ASSERT(k_s.s_w_id * k_s.s_i_id % 10000 == k_su.su_suppkey);
-          if (min_qty > v_s->s_quantity) {
-            min_k_s.s_w_id = k_s.s_w_id;
-            min_k_s.s_i_id = k_s.s_i_id;
-            min_v_s.s_quantity = v_s->s_quantity;
-            min_v_s.s_ytd = v_s->s_ytd;
-            min_v_s.s_order_cnt = v_s->s_order_cnt;
-            min_v_s.s_remote_cnt = v_s->s_remote_cnt;
-          }
-        }
+						ASSERT(k_s.s_w_id * k_s.s_i_id % 10000 == k_su.su_suppkey);
+						if (min_qty > v_s->s_quantity) {
+							min_k_s.s_w_id = k_s.s_w_id;
+							min_k_s.s_i_id = k_s.s_i_id;
+							min_v_s.s_quantity = v_s->s_quantity;
+							min_v_s.s_ytd = v_s->s_ytd;
+							min_v_s.s_order_cnt = v_s->s_order_cnt;
+							min_v_s.s_remote_cnt = v_s->s_remote_cnt;
+						}
+					}
 
-        // fetch the (lowest stock level) item info
-        const item::key k_i(min_k_s.s_i_id);
-        item::value v_i_temp;
-        rc = rc_t{RC_INVALID};
-        tbl_item(1)->Get(txn, rc, Encode(str(Size(k_i)), k_i), valptr);
-        TryVerifyRelaxed(rc);
-        const item::value *v_i = Decode(valptr, v_i_temp);
+					// fetch the (lowest stock level) item info
+					const item::key k_i(min_k_s.s_i_id);
+					item::value v_i_temp;
+					rc = rc_t{RC_INVALID};
+					tbl_item(1)->Get(txn, rc, Encode(str(Size(k_i)), k_i), valptr);
+					TryVerifyRelaxed(rc);
+					const item::value *v_i = Decode(valptr, v_i_temp);
 #ifndef NDEBUG
-        checker::SanityCheckItem(&k_i, v_i);
+					checker::SanityCheckItem(&k_i, v_i);
 #endif
 
-        //  filtering item (i_data like '%b')
-        auto found = v_i->i_data.str().find('b');
-        if (found != std::string::npos) continue;
+					//  filtering item (i_data like '%b')
+					auto found = v_i->i_data.str().find('b');
+					if (found != std::string::npos) continue;
 
-        // XXX. read-mostly txn: update stock or item here
+					// XXX. read-mostly txn: update stock or item here
 
-        if (min_v_s.s_quantity < 15) {
-          stock::value new_v_s;
-          new_v_s.s_quantity = min_v_s.s_quantity + 50;
-          new_v_s.s_ytd = min_v_s.s_ytd;
-          new_v_s.s_order_cnt = min_v_s.s_order_cnt;
-          new_v_s.s_remote_cnt = min_v_s.s_remote_cnt;
+					if (min_v_s.s_quantity < 15) {
+						stock::value new_v_s;
+						new_v_s.s_quantity = min_v_s.s_quantity + 50;
+						new_v_s.s_ytd = min_v_s.s_ytd;
+						new_v_s.s_order_cnt = min_v_s.s_order_cnt;
+						new_v_s.s_remote_cnt = min_v_s.s_remote_cnt;
 #ifndef NDEBUG
-          checker::SanityCheckStock(&min_k_s);
+						checker::SanityCheckStock(&min_k_s);
 #endif
-          TryCatch(tbl_stock(min_k_s.s_w_id)
-                        ->Put(txn, Encode(str(Size(min_k_s)), min_k_s),
-                              Encode(str(Size(new_v_s)), new_v_s)));
-        }
+						TryCatch(tbl_stock(min_k_s.s_w_id)
+													->Put(txn, Encode(str(Size(min_k_s)), min_k_s),
+																Encode(str(Size(new_v_s)), new_v_s)));
+					}
 
-        // TODO. sorting by n_name, su_name, i_id
+					// TODO. sorting by n_name, su_name, i_id
 
-        /*
-        cout << k_su.su_suppkey        << ","
-                << v_su->su_name                << ","
-                << v_n->n_name                  << ","
-                << k_i.i_id                     << ","
-                << v_i->i_name                  << std::endl;
-                */
-      }
-    }
-  }
+					/*
+					cout << k_su.su_suppkey        << ","
+									<< v_su->su_name                << ","
+									<< v_n->n_name                  << ","
+									<< k_i.i_id                     << ","
+									<< v_i->i_name                  << std::endl;
+									*/
+				}
+			}
+		}
+		gettimeofday(&end_tv, 0);
 
+		if (end_tv.tv_sec - start_latency_time >= 1) {
+			start_latency_time = end_tv.tv_sec;
+			fprintf(lfp, "%d, %f\n", time_count, t.lap_ms());
+			//fflush(lfp);
+			//std::cerr << "[" << time_count << "] Q2 end_latency_ms: " << std::endl;
+			time_count++;
+		}
+
+		if (end_tv.tv_sec - start_tv.tv_sec >= 239) {
+			printf("end Q2\n");
+			break;
+		}
+	}
   TryCatch(db->Commit(txn));
+	printf("commit Q2\n");
+	fclose(lfp);
   return {RC_TRUE};
 }
 
@@ -2515,9 +2546,13 @@ class tpcc_bench_runner : public bench_runner {
                                       &barrier_a, &barrier_b,
                                       (i % NumWarehouses()) + 1));
     } else {
-      for (size_t i = 0; i < ermia::config::worker_threads; i++) {
-        ret.push_back(new tpcc_worker(i, r.next(), db, open_tables, partitions,
-                                      &barrier_a, &barrier_b, i + 1));
+      for (size_t i = 0; i <= ermia::config::worker_threads; i++) { //default <
+				if (i == ermia::config::worker_threads)
+					ret.push_back(new tpcc_worker(i, r.next(), db, open_tables, partitions,
+																				&barrier_a, &barrier_b, 7));
+				else
+        	ret.push_back(new tpcc_worker(i, r.next(), db, open_tables, partitions,
+                                      	&barrier_a, &barrier_b, i + 1));
       }
     }
     return ret;

@@ -28,7 +28,7 @@ uint64_t ssn_read_opt_threshold = SSN_READ_OPT_DISABLED;
 int wait_for_backups = 0;
 int num_backups = 0;
 std::atomic<uint32_t> num_active_backups(0);
-uint64_t log_buffer_mb = 512;
+uint64_t log_buffer_mb = 128;
 uint64_t log_segment_mb = 8192;
 uint32_t log_redo_partitions = 0;
 std::string log_dir("");
@@ -39,7 +39,7 @@ std::string primary_port("10000");
 bool htt_is_on = true;
 bool physical_workers_only = true;
 bool print_cpu_util = false;
-uint64_t node_memory_gb = 12;
+uint64_t node_memory_gb = 150; // default is 12
 bool log_ship_offset_replay = false;
 int recovery_warm_up_policy = WARM_UP_NONE;
 int log_ship_warm_up_policy = WARM_UP_NONE;

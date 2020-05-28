@@ -2141,14 +2141,17 @@ rc_t tpcc_worker::txn_query2() {
   //    db->NewTransaction(ermia::transaction::TXN_FLAG_READ_MOSTLY, arena, txn_buf());
   ermia::transaction *txn =
       db->NewTransaction(0, arena, txn_buf());
-	FILE* lfp = fopen("latency.data", "a+");
+	// [HYU] for breakdown
+	//FILE* lfp = fopen("latency.data", "a+");
+	sleep(5);
 	struct timeval start_tv, end_tv, latency_tv;
 	long start_latency_time;
 	int time_count = 1;
 	gettimeofday(&start_tv, 0);
 	gettimeofday(&latency_tv, 0);
 	start_latency_time = latency_tv.tv_sec;
-	
+	// end
+
 	while (1) {
 		util::timer t;
 
@@ -2225,9 +2228,18 @@ rc_t tpcc_worker::txn_query2() {
 						const stock::key k_s(it.first, it.second);
 						stock::value v_s_tmp(0, 0, 0, 0);
 						rc = rc_t{RC_INVALID};
+						//[HYU]
+retry_stock:
 						tbl_stock(it.first)->Get(txn, rc, Encode(str(Size(k_s)), k_s), valptr);
 						TryVerifyRelaxed(rc);
+						if (valptr.data() == (uint8_t*)0x8 || valptr.data() == (uint8_t*)0x4) {
+							//printf("retry?\n");
+							goto retry_stock;
+						}
 						const stock::value *v_s = Decode(valptr, v_s_tmp);
+						//[HYU]
+						if (v_s == NULL)
+							goto retry_stock;
 
 						ASSERT(k_s.s_w_id * k_s.s_i_id % 10000 == k_su.su_suppkey);
 						if (min_qty > v_s->s_quantity) {
@@ -2287,20 +2299,21 @@ rc_t tpcc_worker::txn_query2() {
 
 		if (end_tv.tv_sec - start_latency_time >= 1) {
 			start_latency_time = end_tv.tv_sec;
-			fprintf(lfp, "%d, %f\n", time_count, t.lap_ms());
+			//fprintf(lfp, "%d, %lf\n", time_count, t.lap_ms());
 			//fflush(lfp);
 			//std::cerr << "[" << time_count << "] Q2 end_latency_ms: " << std::endl;
 			time_count++;
 		}
 
-		if (end_tv.tv_sec - start_tv.tv_sec >= 239) {
+		//if (end_tv.tv_sec - start_tv.tv_sec >= 50) {
+		if (time_count >= 220) {
 			printf("end Q2\n");
 			break;
 		}
 	}
   TryCatch(db->Commit(txn));
 	printf("commit Q2\n");
-	fclose(lfp);
+	//fclose(lfp);
   return {RC_TRUE};
 }
 
@@ -2541,7 +2554,7 @@ class tpcc_bench_runner : public bench_runner {
     util::fast_random r(23984543);
     std::vector<bench_worker *> ret;
     if (NumWarehouses() <= ermia::config::worker_threads) {
-      for (size_t i = 0; i < ermia::config::worker_threads; i++)
+      for (size_t i = 0; i <= ermia::config::worker_threads; i++) //default <
         ret.push_back(new tpcc_worker(i, r.next(), db, open_tables, partitions,
                                       &barrier_a, &barrier_b,
                                       (i % NumWarehouses()) + 1));
@@ -2549,7 +2562,7 @@ class tpcc_bench_runner : public bench_runner {
       for (size_t i = 0; i <= ermia::config::worker_threads; i++) { //default <
 				if (i == ermia::config::worker_threads)
 					ret.push_back(new tpcc_worker(i, r.next(), db, open_tables, partitions,
-																				&barrier_a, &barrier_b, 7));
+																				&barrier_a, &barrier_b, 1));
 				else
         	ret.push_back(new tpcc_worker(i, r.next(), db, open_tables, partitions,
                                       	&barrier_a, &barrier_b, i + 1));

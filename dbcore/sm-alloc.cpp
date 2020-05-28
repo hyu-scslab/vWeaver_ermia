@@ -139,7 +139,6 @@ void gc_version_chain(fat_ptr *oid_entry) {
     // grabs the latest committed version directly. Log replay after the
     // chkpt-start lsn is necessary for correctness.
     uint64_t glsn = volatile_read(gc_lsn);
-		//uint64_t lclsn = volatile_read(last_clsn);
 
 		// HYU
 		if (cur_obj->HYU_gc_candidate_clsn_ == glsn) {
@@ -168,6 +167,13 @@ void gc_version_chain(fat_ptr *oid_entry) {
         fat_ptr next_ptr = cur_obj->GetNextVolatile();
         cur_obj->SetClsn(NULL_PTR);
         cur_obj->SetNextVolatile(NULL_PTR);
+#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+				cur_obj->SetHighway(NULL_PTR);
+				cur_obj->SetHighwayClsn(NULL_PTR);
+				cur_obj->SetLeftShortcut(NULL_PTR);
+				cur_obj->SetLevel(1);
+				cur_obj->SetHighwayLevel(0);
+#endif /* HYU_ZIGZAG */
         if (!tls_free_object_pool) {
           tls_free_object_pool = new TlsFreeObjectPool;
         }
@@ -237,6 +243,13 @@ void deallocate(fat_ptr p) {
   Object *obj = (Object *)p.offset();
   obj->SetNextVolatile(NULL_PTR);
   obj->SetClsn(NULL_PTR);
+#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+	obj->SetHighway(NULL_PTR);
+	obj->SetHighwayClsn(NULL_PTR);
+	obj->SetLeftShortcut(NULL_PTR);
+	obj->SetLevel(1);
+	obj->SetHighwayLevel(0);
+#endif /* HYU_ZIGZAG */
   if (!tls_free_object_pool) {
     tls_free_object_pool = new TlsFreeObjectPool;
   }

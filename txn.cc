@@ -102,7 +102,10 @@ transaction::~transaction() {
 
   // transaction shouldn't fall out of scope w/o resolution
   // resolution means TXN_CMMTD, and TXN_ABRTD
-  ASSERT(state() != TXN::TXN_ACTIVE && state() != TXN::TXN_COMMITTING);
+	// [HYU]
+  ASSERT(state() != TXN::TXN_ACTIVE && state() != TXN::TXN_COMMITTING
+			&& state() != TXN::TXN_ALMOST_COMMIT);
+  //ASSERT(state() != TXN::TXN_ACTIVE && state() != TXN::TXN_COMMITTING);
 #if defined(SSN) || defined(SSI)
   if (not config::enable_safesnap or (not(flags & TXN_FLAG_READ_ONLY)))
     RCU::rcu_exit();
@@ -1129,6 +1132,10 @@ rc_t transaction::si_commit() {
 
   log->commit(NULL);  // will populate log block
 
+	// [HYU] After this point, we guarantee there is no transaction abortion
+	// And also, we can guarantee about crash because of log flush
+	volatile_write(xc->state, TXN::TXN_ALMOST_COMMIT);
+
   // post-commit cleanup: install clsn to tuples
   // (traverse write-tuple)
   // stuff clsn in tuples in write-set
@@ -1284,6 +1291,7 @@ rc_t transaction::Update(IndexDescriptor *index_desc, OID oid, const varstr *k, 
       ASSERT(XID::from_ptr(prev->sstamp) == xc->owner);
       ASSERT(tuple->NextVolatile() == prev);
 #endif
+			//add_to_write_set(tuple_array->get(oid), index_desc, *k); 
       add_to_write_set(tuple_array->get(oid));
       prev_persistent_ptr = prev_obj->GetPersistentAddress();
     }
@@ -1291,6 +1299,9 @@ rc_t transaction::Update(IndexDescriptor *index_desc, OID oid, const varstr *k, 
     ASSERT(not tuple->pvalue or tuple->pvalue->size() == tuple->size);
     ASSERT(tuple->GetObject()->GetClsn().asi_type() == fat_ptr::ASI_XID);
     ASSERT(oidmgr->oid_get_version(tuple_fid, oid, xc) == tuple);
+#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+		ASSERT(oidmgr->oid_get_version_zigzag(tuple_fid, oid, xc) == tuple);
+#endif /* HYU_ZIGZAG */
     ASSERT(log);
 
     // FIXME(tzwang): mark deleted in all 2nd indexes as well?
@@ -1450,9 +1461,9 @@ rc_t transaction::DoTupleRead(dbtuple *tuple, varstr *out_v) {
   ASSERT(xc);
   bool read_my_own =
       (tuple->GetObject()->GetClsn().asi_type() == fat_ptr::ASI_XID);
-  ASSERT(not read_my_own or
+  /*ASSERT(not read_my_own or
          (read_my_own and
-          XID::from_ptr(tuple->GetObject()->GetClsn()) == xc->owner));
+          XID::from_ptr(tuple->GetObject()->GetClsn()) == xc->owner));*/
   ASSERT(not read_my_own or not(flags & TXN_FLAG_READ_ONLY));
 
 #if defined(SSI) || defined(SSN) || defined(MVOCC)

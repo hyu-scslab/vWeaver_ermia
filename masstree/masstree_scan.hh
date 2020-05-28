@@ -316,11 +316,45 @@ int basic_table<P>::scan(H helper, Str firstkey, bool emit_firstkey, F &scanner,
     case mystack_type::scan_emit: { // surpress cross init warning about v
       ++scancount;
       ermia::dbtuple *v = NULL;
+#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+			ermia::dbtuple *highway_v = NULL;
+#endif /* HYU_ZIGZAG */
       ermia::OID o = entry.value();
       if (ermia::config::is_backup_srv()) {
         v = ermia::oidmgr->BackupGetVersion(tuple_array_, pdest_array_, o, xc);
       } else {
+retry_rq:
+				uint64_t point_cnt;
+				uint64_t zigzag_cnt;
+#ifdef HYU_DEBUG /* HYU_DEBUG */
+				v = ermia::oidmgr->oid_get_version_debug(tuple_array_, o, xc, &point_cnt);
+#else /* HYU_DEBUG */
         v = ermia::oidmgr->oid_get_version(tuple_array_, o, xc);
+#endif /* HYU_DEBUG */
+
+#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+#ifdef HYU_DEBUG /* HYU_DEBUG */
+				highway_v = ermia::oidmgr->oid_get_version_zigzag_debug(tuple_array_, o, xc, &zigzag_cnt);
+#else /* HYU_DEBUG */
+				highway_v = ermia::oidmgr->oid_get_version_zigzag(tuple_array_, o, xc);
+#endif /* HYU_DEBUG */
+
+				if (v != highway_v) {
+					printf("[HYU] scan fail in range scan\n");
+					goto retry_rq;
+				}
+
+#ifdef HYU_DEBUG /* HYU_DEBUG */
+				if (point_cnt > zigzag_cnt) {
+					FILE* rqcnt_fp = fopen("rqcnt.data", "a+");
+					fprintf(rqcnt_fp, "point_cnt: %ld, zigzag_cnt: %ld\n", point_cnt, zigzag_cnt);
+					fflush(rqcnt_fp);
+					fclose(rqcnt_fp);
+				} else if (point_cnt < zigzag_cnt) {
+					printf("why??? RQ %ld %ld\n", point_cnt, zigzag_cnt);
+				}
+#endif /* HYU_DEBUG */
+#endif /* HYU_ZIGZAG */
       }
       if (v) {
         if (!scanner.visit_value(ka, v))

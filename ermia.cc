@@ -158,6 +158,9 @@ void ConcurrentMasstreeIndex::Get(transaction *t, rc_t &rc, const varstr &key,
     bool found = masstree_.search(key, oid, t->xc->begin_epoch, &sinfo);
 
     dbtuple *tuple = nullptr;
+#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+		dbtuple *zigzag_tuple = nullptr;
+#endif /* HYU_ZIGZAG */
     if (found) {
       // Key-OID mapping exists, now try to get the actual tuple to be sure
       if (config::is_backup_srv()) {
@@ -165,8 +168,39 @@ void ConcurrentMasstreeIndex::Get(transaction *t, rc_t &rc, const varstr &key,
             descriptor_->GetTupleArray(),
             descriptor_->GetPersistentAddressArray(), oid, t->xc);
       } else {
+retry_get:
+				uint64_t point_cnt = 0;
+				uint64_t zigzag_cnt = 0;
         tuple =
+#ifdef HYU_DEBUG /* HYU_DEBUG */
+            oidmgr->oid_get_version_debug(descriptor_->GetTupleArray(), oid, t->xc, &point_cnt);
+#else /* HYU_DEBUG */
             oidmgr->oid_get_version(descriptor_->GetTupleArray(), oid, t->xc);
+#endif /* HYU_DEBUG */
+#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+				zigzag_tuple =
+#ifdef HYU_DEBUG /* HYU_DEBUG */
+						oidmgr->oid_get_version_zigzag_debug(descriptor_->GetTupleArray(), oid, t->xc, &zigzag_cnt);
+#else /* HYU_DEBUG */
+						oidmgr->oid_get_version_zigzag(descriptor_->GetTupleArray(), oid, t->xc);
+#endif /* HYU_DEBUG */
+
+#ifdef HYU_DEBUG /* HYU_DEBUG */
+				if (point_cnt > zigzag_cnt) {
+					FILE* cnt_fp = fopen("cnt.data", "a+");
+					fprintf(cnt_fp, "point_cnt: %ld, zigzag_cnt: %ld\n", point_cnt, zigzag_cnt);
+					fflush(cnt_fp);
+					fclose(cnt_fp);
+				} else if (point_cnt < zigzag_cnt) {
+					printf("why??? GET %ld %ld\n", point_cnt, zigzag_cnt);
+				}
+#endif /* HYU_DEBUG */
+
+				if (tuple != zigzag_tuple) {
+					printf("[HYU] scan fail in GET\n");
+					goto retry_get;
+				}
+#endif /* HYU_ZIGZAG */
       }
       if (!tuple) {
         found = false;

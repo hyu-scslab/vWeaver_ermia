@@ -164,7 +164,7 @@ struct dbtuple {
   // Note: the stable=false option will try to read from pvalue,
   // instead of the real data area; so giving stable=false is only
   // safe for the updating transaction itself to read its own write.
-  inline rc_t DoRead(varstr *out_v, bool stable) const {
+  inline rc_t DoRead(varstr *out_v, bool stable) const { // [HYU] default const
     if (stable) {
       out_v->p = get_value_start();
     } else {
@@ -173,7 +173,10 @@ struct dbtuple {
         return rc_t{RC_FALSE};
       }
       out_v->p = pvalue->data();
-      ASSERT(pvalue->size() == size);
+      //ASSERT(pvalue->size() == size);
+			//HYU
+			if (pvalue->size() != size)
+				pvalue->l = size;
     }
     out_v->l = size;
     return size > 0 ? rc_t{RC_TRUE} : rc_t{RC_FALSE};

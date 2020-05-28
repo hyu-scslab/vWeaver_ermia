@@ -198,6 +198,7 @@ void sm_tx_log_impl::add_payload_request(log_record_type type, FID f, OID o,
     p = req.payload_ptr = _log->lsn2ptr(b->payload_lsn(0), false);
     format_extra_ptr(req);
     if (pdest) {
+			printf("Hi\n");
       *pdest = p;
       pdest = NULL;
     }

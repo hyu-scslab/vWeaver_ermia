@@ -210,7 +210,7 @@ class bench_runner {
 
   bench_runner(ermia::Engine *db)
       : db(db),
-        barrier_a(ermia::config::worker_threads + 1),		// default worker_threads
+        barrier_a(ermia::config::worker_threads + 1),		// default worker_threads (+1)
         barrier_b(ermia::config::worker_threads > 0 ? 1 : 0) {}
   virtual ~bench_runner() {}
   virtual void prepare(char *) = 0;

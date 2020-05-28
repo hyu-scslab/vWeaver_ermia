@@ -169,6 +169,9 @@ struct sm_oid_mgr {
   void oid_put(FID f, OID o, fat_ptr p);
   void oid_put_new(FID f, OID o, fat_ptr p);
   void oid_put_new_if_absent(FID f, OID o, fat_ptr p);
+#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+	bool SubmitHighwayChain(Object* new_obj, fat_ptr old_ptr);
+#endif /* HYU_ZIGZAG */
 
   /* Return a fat_ptr to the overwritten object (could be an in-flight version!)
    */
@@ -179,6 +182,19 @@ struct sm_oid_mgr {
 
   dbtuple *oid_get_latest_version(FID f, OID o);
 
+#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+#ifdef HYU_DEBUG /* HYU_DEBUG */
+  dbtuple *oid_get_version_zigzag_debug(FID f, OID o, TXN::xid_context *visitor_xc, uint64_t *cnt);
+  dbtuple *oid_get_version_zigzag_debug(oid_array *oa, OID o, TXN::xid_context *visitor_xc, uint64_t *cnt);
+#endif /* HYU_DEBUG */
+  dbtuple *oid_get_version_zigzag(FID f, OID o, TXN::xid_context *visitor_xc);
+  dbtuple *oid_get_version_zigzag(oid_array *oa, OID o, TXN::xid_context *visitor_xc);
+#endif /* HYU_ZIGZAG */
+
+#ifdef HYU_DEBUG /* HYU_DEBUG */
+  dbtuple *oid_get_version_debug(FID f, OID o, TXN::xid_context *visitor_xc, uint64_t *cnt);
+  dbtuple *oid_get_version_debug(oid_array *oa, OID o, TXN::xid_context *visitor_xc, uint64_t *cnt);
+#endif /* HYU_DEBUG */
   dbtuple *oid_get_version(FID f, OID o, TXN::xid_context *visitor_xc);
   dbtuple *oid_get_version(oid_array *oa, OID o, TXN::xid_context *visitor_xc);
 

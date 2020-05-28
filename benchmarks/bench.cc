@@ -122,7 +122,7 @@ void bench_worker::MyWork(char *) {
 				//printf("hi i'm worker %d\n", get_worker_id());
 				if (start_flag == false) {
 					do_workload_function(5);
-					//start_flag = true;
+					start_flag = true;
 				}
 				continue;
 			}
@@ -131,7 +131,6 @@ void bench_worker::MyWork(char *) {
       for (size_t i = 0; i < workload.size(); i++) {
         if ((i + 1) == workload.size() || d < workload[i].frequency) {
 					if (!workload[i].name.compare("Query2")) {
-						//__sync_fetch_and_add(&Q2_count, 1);
 						break;
 					}
           do_workload_function(i);
@@ -366,7 +365,7 @@ void bench_runner::measure_read_view_lsn() {
 }
 
 void bench_runner::start_measurement() {
-	FILE* fp = fopen("throughput.data", "a+");
+	//FILE* fp = fopen("throughput.data", "a+");
   workers = make_workers();
   ALWAYS_ASSERT(!workers.empty());
   for (std::vector<bench_worker *>::const_iterator it = workers.begin();
@@ -648,7 +647,7 @@ void bench_runner::start_measurement() {
          << " system aborts/s\t" << std::get<3>(c.second) / (double)elapsed_sec
          << " user aborts/s\n";
   }
-	fclose(fp);
+	//fclose(fp);
   std::cout.flush();
 }
 

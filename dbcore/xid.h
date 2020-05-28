@@ -18,7 +18,9 @@ enum txn_state {
   TXN_COMMITTING,
   TXN_CMMTD,
   TXN_ABRTD,
-  TXN_INVALID
+  TXN_INVALID,
+	// [HYU]
+	TXN_ALMOST_COMMIT
 };
 
 struct xid_context {
@@ -135,7 +137,10 @@ inline XID take_one(thread_data *t) {
 #endif
   // Note: transaction needs to initialize xc->begin in ctor
   contexts[id].end = 0;
-  ASSERT(contexts[id].state != TXN_COMMITTING);
+	// [HYU]
+	ASSERT(contexts[id].state != TXN_COMMITTING ||
+			contexts[id].state != TXN_ALMOST_COMMIT);
+  //ASSERT(contexts[id].state != TXN_COMMITTING);
   contexts[id].state = TXN_ACTIVE;
   contexts[id].xct = nullptr;
   return x;

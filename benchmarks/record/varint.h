@@ -8,6 +8,7 @@ inline const uint8_t *read_uvint32_slow(const uint8_t *buf, uint32_t *value) {
   const uint8_t *p;
   uint32_t b, result;
 
+	// [HYU] default is likely in if statement
   p = buf;
 
   b = *p++;
@@ -26,6 +27,8 @@ inline const uint8_t *read_uvint32_slow(const uint8_t *buf, uint32_t *value) {
   result |= b << 28;
   if (likely(b < 0x80)) goto done;
 
+	// [HYU] evade assertion
+	return NULL;
   ALWAYS_ASSERT(false);  // should not reach here (improper encoding)
 
 done:

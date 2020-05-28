@@ -72,6 +72,13 @@ class Object {
         next_pdest_(NULL_PTR),
         next_volatile_(NULL_PTR),
         clsn_(NULL_PTR),
+#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+				highway_(NULL_PTR),
+				highway_clsn_(NULL_PTR),
+				left_shortcut_(NULL_PTR),
+				lv_(1),
+				highway_lv_(0),
+#endif /* HYU_ZIGZAG */
 				HYU_gc_candidate_clsn_(0) {}
 
   Object(fat_ptr pdest, fat_ptr next, epoch_num e, bool in_memory)
@@ -81,6 +88,13 @@ class Object {
         next_pdest_(next),
         next_volatile_(NULL_PTR),
         clsn_(NULL_PTR),
+#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+				highway_(NULL_PTR),
+				highway_clsn_(NULL_PTR),
+				left_shortcut_(NULL_PTR),
+				lv_(1),
+				highway_lv_(0),
+#endif /* HYU_ZIGZAG */
 				HYU_gc_candidate_clsn_(0) {}
 
   inline bool IsDeleted() { return status_ == kStatusDeleted; }
@@ -120,6 +134,16 @@ class Object {
 
 		return (seed * 2685821657736338717ULL) % 2;
 	}
+	inline uint8_t GetLevel() { return lv_; }
+	inline void SetLevel(uint8_t level) { lv_ = level; }
+	inline uint8_t GetHighwayLevel() { return highway_lv_; }
+	inline void SetHighwayLevel(uint8_t level) { highway_lv_ = level; }
+	inline fat_ptr GetHighwayClsn() { return volatile_read(highway_clsn_); }
+	inline fat_ptr GetHighway() { return volatile_read(highway_); }
+	inline fat_ptr GetLeftShortcut() { return volatile_read(left_shortcut_); }
+	inline void SetHighwayClsn(fat_ptr clsn) { volatile_write(highway_clsn_, clsn); }
+	inline void SetHighway(fat_ptr highway) { volatile_write(highway_, highway); }
+	inline void SetLeftShortcut(fat_ptr left) { volatile_write(left_shortcut_, left); }
 #endif /* HYU_ZIGZAG */
   fat_ptr GenerateClsnPtr(uint64_t clsn);
   void Pin(

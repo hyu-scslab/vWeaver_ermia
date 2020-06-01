@@ -125,9 +125,16 @@ public:
   rc_t TryInsert(transaction &t, const varstr *k, varstr *v, bool upsert,
                  OID *inserted_oid);
 
+#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+	virtual void
+  GetOID(const varstr &key, rc_t &rc, TXN::xid_context *xc, OID &out_oid,
+				 next_key_info_t &next_key_info,
+         ConcurrentMasstree::versioned_node_t *out_sinfo = nullptr) = 0;
+#else /* HYU_ZIGZAG */
   virtual void
   GetOID(const varstr &key, rc_t &rc, TXN::xid_context *xc, OID &out_oid,
          ConcurrentMasstree::versioned_node_t *out_sinfo = nullptr) = 0;
+#endif /* HYU_ZIGZAG */
 
   /**
    * Insert key-oid pair to the underlying actual index structure.
@@ -142,8 +149,25 @@ class ConcurrentMasstreeIndex : public OrderedIndex {
   friend class sm_log_recover_impl;
   friend class sm_chkpt_mgr;
 
+#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+public:
+  struct DummyCallback
+      : public ConcurrentMasstree::low_level_search_range_callback {
+    DummyCallback() = default;
+
+    virtual void
+    on_resp_node(const typename ConcurrentMasstree::node_opaque_t *n,
+                 uint64_t version);
+    virtual bool invoke(const ConcurrentMasstree *btr_ptr,
+                        const typename ConcurrentMasstree::string_type &k,
+                        dbtuple *v,
+                        const typename ConcurrentMasstree::node_opaque_t *n,
+                        uint64_t version);
+
+  };
+#endif /* HYU_ZIGZAG */
 private:
-  ConcurrentMasstree masstree_;
+  //ConcurrentMasstree masstree_;
 
   struct SearchRangeCallback {
     SearchRangeCallback(OrderedIndex::ScanCallback &upcall)
@@ -200,6 +224,7 @@ private:
                          uint64_t version);
 
 public:
+  ConcurrentMasstree masstree_;
   ConcurrentMasstreeIndex(std::string name, const char *primary)
       : OrderedIndex(name, primary) {}
 
@@ -231,12 +256,34 @@ public:
   std::map<std::string, uint64_t> Clear() override;
   inline void SetArrays() override { masstree_.set_arrays(descriptor_); }
 
+
+#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+  inline void
+  GetOID(const varstr &key, rc_t &rc, TXN::xid_context *xc, OID &out_oid,
+				 next_key_info_t &next_key_info,
+         ConcurrentMasstree::versioned_node_t *out_sinfo = nullptr) override {
+		OID next_oid;
+		Masstree::leaf<masstree_params>* next_leaf;
+		Masstree::leaf<masstree_params>::permuter_type next_perm;
+		int next_ki;
+		bool found = masstree_.search_zigzag(key, out_oid, next_oid, next_leaf,
+														next_perm, next_ki, xc->begin_epoch, out_sinfo);
+		if (found) {
+			next_key_info.oid = next_oid;
+			next_key_info.leaf = next_leaf;
+			next_key_info.perm = next_perm;
+			next_key_info.ki = next_ki;
+		}
+    volatile_write(rc._val, found ? RC_TRUE : RC_FALSE);
+  }
+#else /* HYU_ZIGZAG */
   inline void
   GetOID(const varstr &key, rc_t &rc, TXN::xid_context *xc, OID &out_oid,
          ConcurrentMasstree::versioned_node_t *out_sinfo = nullptr) override {
     bool found = masstree_.search(key, out_oid, xc->begin_epoch, out_sinfo);
     volatile_write(rc._val, found ? RC_TRUE : RC_FALSE);
   }
+#endif /* HYU_ZIGZAG */
 
 private:
   bool InsertIfAbsent(transaction *t, const varstr &key, OID oid) override;

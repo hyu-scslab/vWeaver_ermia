@@ -294,12 +294,24 @@ rc_t ConcurrentMasstreeIndex::DoTreePut(transaction &t, const varstr *k,
   // do regular search
   OID oid = 0;
   rc_t rc = {RC_INVALID};
+#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+	next_key_info_t next_key_info;
+	GetOID(*k, rc, t.xc, oid, next_key_info);
+  
+	if (rc._val == RC_TRUE) {
+    return t.Update(descriptor_, oid, k, v, next_key_info);
+  } else {
+    return rc_t{RC_ABORT_INTERNAL};
+  }
+#else /* HYU_ZIGZAG */
   GetOID(*k, rc, t.xc, oid);
-  if (rc._val == RC_TRUE) {
+  
+	if (rc._val == RC_TRUE) {
     return t.Update(descriptor_, oid, k, v);
   } else {
     return rc_t{RC_ABORT_INTERNAL};
   }
+#endif /* HYU_ZIGZAG */
 }
 
 rc_t ConcurrentMasstreeIndex::DoNodeRead(
@@ -315,6 +327,21 @@ rc_t ConcurrentMasstreeIndex::DoNodeRead(
   }
   return rc_t{RC_TRUE};
 }
+
+#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+void ConcurrentMasstreeIndex::DummyCallback::on_resp_node(
+    const typename ConcurrentMasstree::node_opaque_t *n, uint64_t version) {
+
+}
+
+bool ConcurrentMasstreeIndex::DummyCallback::invoke(
+    const ConcurrentMasstree *btr_ptr,
+    const typename ConcurrentMasstree::string_type &k, dbtuple *v,
+    const typename ConcurrentMasstree::node_opaque_t *n, uint64_t version) {
+	return true;
+}
+
+#endif /* HYU_ZIGZAG */
 
 void ConcurrentMasstreeIndex::XctSearchRangeCallback::on_resp_node(
     const typename ConcurrentMasstree::node_opaque_t *n, uint64_t version) {

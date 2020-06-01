@@ -49,8 +49,38 @@ forward:
     ka_.shift_by(-match);
     root = lv_.layer();
     goto retry;
-  } else
+  } else {
+#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+		// [HYU] for debug
+		//FILE* next_fp = fopen("next.data", "a+");
+		
+		if (unsigned(kx.i + 1) < unsigned(perm_.size())) {
+			next_ = n_;
+			next_perm_ = perm_;
+			i_ = kx.i + 1;
+  		lv_next_ = n_->lv_[next_perm_[i_]];
+			//fprintf(next_fp, "this key: %u, next key: %u\n", lv_.value(), lv_next_.value());
+		} else {
+  		next_ = n_->safe_next();
+			if (next_) {
+				next_perm_ = next_->permutation();
+				i_ = 0;
+				lv_next_ = next_->lv_[next_perm_[i_]];
+				//fprintf(next_fp, "this key: %u, next leaf key: %u\n", lv_.value(),
+						//lv_next_.value());
+			} else {
+				next_ = nullptr;
+				next_perm_ = NULL;
+				lv_next_.make_empty();
+				i_ = -1;
+				//fprintf(next_fp, "this leaf is the end of the index\n");
+			}
+		}
+		//fflush(next_fp);
+		//fclose(next_fp);
+#endif /* HYU_ZIGZAG */
     return match;
+	}
 }
 
 template <typename P>

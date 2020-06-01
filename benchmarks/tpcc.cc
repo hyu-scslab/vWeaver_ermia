@@ -2152,6 +2152,8 @@ rc_t tpcc_worker::txn_query2() {
 	start_latency_time = latency_tv.tv_sec;
 	// end
 
+	printf("start Q2\n");
+
 	while (1) {
 		util::timer t;
 
@@ -2229,8 +2231,10 @@ rc_t tpcc_worker::txn_query2() {
 						stock::value v_s_tmp(0, 0, 0, 0);
 						rc = rc_t{RC_INVALID};
 						//[HYU]
+
+						ermia::varstr key = Encode(str(Size(k_s)), k_s);
 retry_stock:
-						tbl_stock(it.first)->Get(txn, rc, Encode(str(Size(k_s)), k_s), valptr);
+						tbl_stock(it.first)->Get(txn, rc, key, valptr);
 						TryVerifyRelaxed(rc);
 						if (valptr.data() == (uint8_t*)0x8 || valptr.data() == (uint8_t*)0x4) {
 							//printf("retry?\n");

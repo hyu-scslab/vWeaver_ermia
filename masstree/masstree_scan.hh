@@ -41,7 +41,9 @@ public:
     return n.n_->compare_key(k, p);
   }
 
-private:
+// [HYU] make public for using txn.cc
+public:
+//private:
   node_base<P> *root_;
   leaf<P> *n_;
   nodeversion_type v_;
@@ -232,7 +234,7 @@ int scanstackelt<P>::find_next(H &helper, key_type &ka, leafvalue_type &entry) {
     return scan_retry;
 
 retry_entry:
-  kp = this->kp();
+  kp = this->kp(); // perm_[ki]
   if (kp >= 0) {
     ikey_type ikey = n_->ikey0_[kp];
     int keylenx = n_->keylenx_[kp];

@@ -18,6 +18,9 @@
 #include "masstree_print.hh"
 #include "masstree_remove.hh"
 #include "masstree_scan.hh"
+#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+#include "masstree_struct.hh"
+#endif /* HYU_ZIGZAG */
 #include "mtcounters.hh"
 #include "timestamp.hh"
 
@@ -123,6 +126,9 @@ public:
   typedef Masstree::basic_table<P> basic_table_type;
   typedef Masstree::unlocked_tcursor<P> unlocked_tcursor_type;
   typedef typename node_base_type::nodeversion_type nodeversion_type;
+#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+	typedef typename Masstree::leaf<P>::permuter_type permuter_type;
+#endif /* HYU_ZIGZAG */
 
   typedef varstr key_type;
   typedef lcdf::Str string_type;
@@ -189,7 +195,12 @@ public:
 
   /** NOTE: the public interface assumes that the caller has taken care
    * of setting up RCU */
-
+#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+	inline bool search_zigzag(const key_type &k, OID &o, OID &next_o,
+														Masstree::leaf<P> *next_leaf,
+														permuter_type &next_perm, int &next_ki,
+														epoch_num e, versioned_node_t *search_info) const;
+#endif /* HYU_ZIGZAG */
   inline bool search(const key_type &k, OID &o, epoch_num e,
                      versioned_node_t *search_info = nullptr) const;
 
@@ -399,6 +410,8 @@ public:
   static inline size_t InternalNodeSize() { return sizeof(internode_type); }
 
   static inline size_t LeafNodeSize() { return sizeof(leaf_type); }
+  
+	template <bool Reverse> class low_level_search_range_scanner;
 
 private:
   Masstree::basic_table<P> table_;
@@ -411,7 +424,7 @@ private:
   class size_walk_callback;
   template <bool Reverse> class search_range_scanner_base;
   template <bool Reverse> class no_callback_search_range_scanner;
-  template <bool Reverse> class low_level_search_range_scanner;
+  //template <bool Reverse> class low_level_search_range_scanner;
   template <typename F> class low_level_search_range_callback_wrapper;
 };
 
@@ -497,6 +510,34 @@ template <typename P> inline size_t mbtree<P>::size() const {
   tree_walk(c);
   return c.size_;
 }
+
+#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+template <typename P>
+inline bool mbtree<P>::search_zigzag(const key_type &k, OID &o, OID &next_o,
+														Masstree::leaf<P> *next_leaf,
+														permuter_type &next_perm, int &next_ki,
+														epoch_num e, versioned_node_t *search_info) const {
+  threadinfo ti(e);
+  Masstree::unlocked_tcursor<P> lp(table_, k.data(), k.size());
+  bool found = lp.find_unlocked(ti);
+  if (found) {
+    o = lp.value();
+		next_o = lp.lv_next_.value();
+		next_leaf = lp.next_;
+		next_perm = lp.next_perm_;
+		next_ki = lp.i_;
+		// [HYU] for debug
+		/*FILE* cmp_fp = fopen("cmp.data", "a+");
+		fprintf(cmp_fp, "o: %u, next_o: %u\n", o, next_o);
+		fflush(cmp_fp);
+		fclose(cmp_fp);*/
+  }
+  if (search_info) {
+    *search_info = versioned_node_t(lp.node(), lp.full_version_value());
+  }
+  return found;
+}
+#endif /* HYU_ZIGZAG */
 
 template <typename P>
 inline bool mbtree<P>::search(const key_type &k, OID &o, epoch_num e,
@@ -631,6 +672,7 @@ public:
                                  low_level_search_range_callback &callback)
       : search_range_scanner_base<Reverse>(boundary), callback_(callback),
         btr_ptr_(btr_ptr) {}
+	
   void visit_leaf(const Masstree::scanstackelt<P> &iter,
                   const Masstree::key<uint64_t> &key, threadinfo &) {
     this->n_ = iter.node();

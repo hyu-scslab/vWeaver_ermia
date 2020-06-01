@@ -1367,6 +1367,78 @@ start_over:
 
   return nullptr;  // No Visible records
 }
+
+// For tuple arrays only, i.e., entries are guaranteed to point to Objects.
+fat_ptr sm_oid_mgr::oid_get_version_zigzag_ptr(oid_array *oa, OID o,
+                                     				TXN::xid_context *visitor_xc) {
+  fat_ptr *entry = oa->get(o);
+start_over:
+  fat_ptr ptr = volatile_read(*entry);
+  ASSERT(ptr.asi_type() == 0);
+  Object *prev_obj = nullptr;
+  while (ptr.offset()) {
+    Object *cur_obj = nullptr;
+		Object *highway_obj = nullptr;
+    // Must read next_ before reading cur_obj->_clsn:
+    // the version we're currently reading (ie cur_obj) might be unlinked
+    // and thus recycled by the memory allocator at any time if it's not
+    // a committed version. If so, cur_obj->_next will be pointing to some
+    // other object in the allocator's free object pool - we'll probably
+    // end up at la-la land if we followed this _next pointer value...
+    // Here we employ some flavor of OCC to solve this problem:
+    // the aborting transaction that will unlink cur_obj will update
+    // cur_obj->_clsn to NULL_PTR, then deallocate(). Before reading
+    // cur_obj->_clsn, we (as the visitor), first dereference pp to get
+    // a stable value that "should" contain the right address of the next
+    // version. We then read cur_obj->_clsn to verify: if it's NULL_PTR
+    // that means we might have read a wrong _next value that's actually
+    // pointing to some irrelevant object in the allocator's memory pool,
+    // hence must start over from the beginning of the version chain.
+    fat_ptr tentative_next = NULL_PTR;
+		fat_ptr tentative_highway = NULL_PTR;
+    // If this is a backup server, then must see persistent_next to find out
+    // the **real** overwritten version.
+    if (config::is_backup_srv() && !config::command_log) {
+			printf("[HYU] we only think about there is no replica\n");
+      oid_get_version_backup(ptr, tentative_next, prev_obj, cur_obj, visitor_xc);
+    } else {
+      ASSERT(ptr.asi_type() == 0);
+      cur_obj = (Object *)ptr.offset();
+      tentative_next = cur_obj->GetNextVolatile();
+			tentative_highway = cur_obj->GetHighway();
+      ASSERT(tentative_next.asi_type() == 0);
+			ASSERT(tentative_highway.asi_type() == 0);
+    }
+
+    bool retry = false;
+    bool visible = TestVisibility(cur_obj, visitor_xc, retry);
+    if (retry) {
+      goto start_over;
+    }
+    if (visible) {
+      return ptr;
+    } else {
+			highway_obj = (Object *)tentative_highway.offset();
+			if (highway_obj == NULL) {
+				ptr = tentative_next;
+				prev_obj = cur_obj;
+				continue;
+			}
+			bool highway_retry = false;
+			bool highway_visible = TestVisibility(highway_obj, visitor_xc, highway_retry);
+
+			if (highway_retry || highway_visible) {
+				ptr = tentative_next;
+			} else {
+				ptr = tentative_highway;
+			}
+			prev_obj = cur_obj;
+		}
+  }
+
+  return NULL_PTR;  // No Visible records
+}
+
 #endif /* HYU_ZIGZAG */
 
 bool sm_oid_mgr::TestVisibility(Object *object, TXN::xid_context *xc, bool &retry) {
@@ -1420,14 +1492,15 @@ bool sm_oid_mgr::TestVisibility(Object *object, TXN::xid_context *xc, bool &retr
 		//															 T2--R(A)------>
 		// When a transaction(T1) starts to commit, and it also gets clsn,
 		// but doesn't start updating clsn in version Object yet.
-		// After that, a new transaction(T2) starts and tries to read a record version that T1 updates.
-		// Because T2 gets begin timestamp after T1 gets clsn (holder->end < xc->begin),
-		// so T2 has to be able to read T1's updated version.
-		// But in TestVisibility, there is no way to say 'visible' in this case.
-		// So we add state TXN_ALMOST_COMMIT that guarantees there is no more transaction abortion
-		// in commit sequence(TXN_ALMOST_COMMIT ~ TXN_CMMTD)
-		// If the version holder's state is TXN_COMMITTING with clsn, wait a slight time using spin
-		// for the time that we can guarantee it is safe to check this version's visibility
+		// After that, a new transaction(T2) starts and tries to read a record
+		// version that T1 updates. Because T2 gets begin timestamp after T1 gets
+		// clsn (holder->end < xc->begin), so T2 has to be able to read T1's updated
+		// version. But in TestVisibility, there is no way to say 'visible' in this
+		// case. So we add state TXN_ALMOST_COMMIT that guarantees there is no more
+		// transaction abortion in commit sequence(TXN_ALMOST_COMMIT ~ TXN_CMMTD)
+		// If the version holder's state is TXN_COMMITTING with clsn,
+		// wait a slight time using spin for the time that we can guarantee
+		// it is safe to check this version's visibility
 		// (TXN_ALMOST_COMMIT or TXN_CMMTD)
     if (state == TXN::TXN_CMMTD || (state == TXN::TXN_COMMITTING && holder->end > 0) ||
 				state == TXN::TXN_ALMOST_COMMIT) {

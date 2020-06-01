@@ -1143,6 +1143,158 @@ rc_t transaction::si_commit() {
   auto &write_set = GetWriteSet();
   for (uint32_t i = 0; i < write_set.size(); ++i) {
     auto &w = write_set[i];
+#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+		ConcurrentMasstreeIndex* index;
+		index = (ConcurrentMasstreeIndex*)w.idx_desc->GetIndex();
+		OID oid;
+		OID next_oid;
+		OID info_oid;
+		Masstree::leaf<masstree_params>* next_leaf;
+		Masstree::leaf<masstree_params>::permuter_type next_perm;
+		ConcurrentMasstree::versioned_node_t sinfo;
+		TXN::xid_context shortcut_xc;
+		oid_array *tuple_array;
+		fat_ptr shortcut_ptr;
+		int next_ki = 0;
+		bool found = true;
+		
+		// [HYU] get next key for shortcut
+		if (w.next_key_info.leaf != nullptr) {
+			info_oid = w.next_key_info.leaf
+										->lv_[w.next_key_info.perm[w.next_key_info.ki]].value();
+		} else if (w.next_key_info.ki == -1) { /* end key */
+			goto fail; 
+		} else { /* insertion case (ki == -2) */
+			goto commit_ts;
+		}
+
+		if (info_oid == w.next_key_info.oid) {
+			/* next_key's location is not moved */
+			next_oid = info_oid;
+			
+			// [HYU] for debug
+			FILE* pass_fp = fopen("pass.data", "a+");
+			fprintf(pass_fp, "pass nkey: %u\n", next_oid);
+			fflush(pass_fp);
+			fclose(pass_fp);
+		} else {
+fail:
+			found = index->masstree_.search_zigzag(w.key, oid, next_oid, next_leaf,
+																	next_perm, next_ki, xc->begin_epoch, &sinfo);
+		
+			assert(found);
+			assert(oid == w.oid);
+			
+			// [HYU] for debug
+			FILE* fail_fp = fopen("fail.data", "a+");
+			fprintf(fail_fp, "fail nkey: %u\n", next_oid);
+			fflush(fail_fp);
+			fclose(fail_fp);
+		}
+
+		/* install left shortcut to object->next */
+		if (next_ki >= 0) {
+			Object *obj = w.get_object();
+			Object *next_obj = (Object*)obj->GetNextVolatile().offset();
+			assert(next_obj != nullptr);
+			memcpy(&shortcut_xc, xc, sizeof(TXN::xid_context));
+			shortcut_xc.begin = xc->end;
+			tuple_array = w.idx_desc->GetTupleArray();
+			shortcut_ptr = oidmgr->oid_get_version_zigzag_ptr(tuple_array, next_oid, &shortcut_xc);
+
+			next_obj->SetLeftShortcut(shortcut_ptr);
+			
+			// [HYU] for debug
+			FILE* sc_fp = fopen("shortcut.data", "a+");
+			fprintf(sc_fp, "shortcut success\n");
+			fflush(sc_fp);
+			fclose(sc_fp);
+		}
+/*
+		ConcurrentMasstreeIndex::DummyCallback callback;
+		lcdf::Str cur_key(w.key.data(), w.key.size());
+
+		typedef simple_threadinfo threadinfo;
+		threadinfo ti(xc->begin_epoch);
+		Masstree::forward_scan_helper helper;
+		ConcurrentMasstree::low_level_search_range_scanner<false> scanner(&index->masstree_, nullptr, callback);
+		typedef typename masstree_params::ikey_type ikey_type;
+		typedef typename Masstree::node_base<masstree_params>::key_type key_type;
+		typedef typename Masstree::leafvalue<masstree_params> leafvalue_type;
+		union {
+			ikey_type
+					x[(MASSTREE_MAXKEYLEN + sizeof(ikey_type) - 1) / sizeof(ikey_type)];
+			char s[MASSTREE_MAXKEYLEN];
+		} keybuf;
+		masstree_precondition(cur_key.len <= (int)sizeof(keybuf));
+		memcpy(keybuf.s, cur_key.s, cur_key.len);
+		key_type ka(keybuf.s, cur_key.len);
+
+		typedef Masstree::scanstackelt<masstree_params> mystack_type;
+		mystack_type
+				stack[(MASSTREE_MAXKEYLEN + sizeof(ikey_type) - 1) / sizeof(ikey_type)];
+		int stackpos = 0;
+		Masstree::basic_table<masstree_params> *table = (Masstree::basic_table<masstree_params>*)index->GetTable();
+		stack[0].root_ = (Masstree::node_base<masstree_params>*)table->root();
+		leafvalue_type entry = leafvalue_type::make_empty();
+
+		int scancount = 0;
+		int state;
+
+		while (1) {
+			state = stack[stackpos].find_initial(helper, ka, true, entry, ti);
+			scanner.visit_leaf(stack[stackpos], ka, ti);
+			if (state != mystack_type::scan_down) {
+				assert(state == mystack_type::scan_emit);
+				break;
+			}
+			ka.shift();
+			++stackpos;
+		}
+		OID chk = entry.value();
+		assert(chk == w.oid);
+		int cnt = 0; // cnt must 2 when break while loop
+
+		while (cnt != 2) {
+			switch (state) {
+			case mystack_type::scan_emit: { // surpress cross init warning about v
+				OID o = entry.value();
+
+				stack[stackpos].ki_ = helper.next(stack[stackpos].ki_);
+				state = stack[stackpos].find_next(helper, ka, entry);
+				cnt++;
+			} break;
+
+			case mystack_type::scan_find_next:
+			find_next:
+				state = stack[stackpos].find_next(helper, ka, entry);
+				if (state != mystack_type::scan_up)
+					scanner.visit_leaf(stack[stackpos], ka, ti);
+				break;
+
+			case mystack_type::scan_up:
+				do {
+					if (--stackpos < 0)
+						goto done;
+					ka.unshift();
+					stack[stackpos].ki_ = helper.next(stack[stackpos].ki_);
+				} while (unlikely(ka.empty()));
+				goto find_next;
+
+			case mystack_type::scan_down:
+				helper.shift_clear(ka);
+				++stackpos;
+				goto retry;
+
+			case mystack_type::scan_retry:
+			retry:
+				state = stack[stackpos].find_retry(helper, ka, ti);
+				break;
+			}
+		}*/
+commit_ts:
+
+#endif /* HYU_ZIGZAG */
     Object *object = w.get_object();
     ASSERT(object);
     dbtuple *tuple = (dbtuple *)object->GetPayload();
@@ -1177,7 +1329,11 @@ bool transaction::MasstreeCheckPhantom() {
   return true;
 }
 
+#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+rc_t transaction::Update(IndexDescriptor *index_desc, OID oid, const varstr *k, varstr *v, next_key_info_t next_key_info) {
+#else /* HYU_ZIGZAG */
 rc_t transaction::Update(IndexDescriptor *index_desc, OID oid, const varstr *k, varstr *v) {
+#endif /* HYU_ZIGZAG */
   oid_array *tuple_array = index_desc->GetTupleArray();
   FID tuple_fid = index_desc->GetTupleFid();
 
@@ -1291,8 +1447,13 @@ rc_t transaction::Update(IndexDescriptor *index_desc, OID oid, const varstr *k, 
       ASSERT(XID::from_ptr(prev->sstamp) == xc->owner);
       ASSERT(tuple->NextVolatile() == prev);
 #endif
-			//add_to_write_set(tuple_array->get(oid), index_desc, *k); 
+
+#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+			add_to_write_set_zigzag(tuple_array->get(oid), k, index_desc, oid,
+															next_key_info);
+#else /* HYU_ZIGZAG */
       add_to_write_set(tuple_array->get(oid));
+#endif /* HYU_ZIGZAG */
       prev_persistent_ptr = prev_obj->GetPersistentAddress();
     }
 
@@ -1452,7 +1613,14 @@ void transaction::FinishInsert(OrderedIndex *index, OID oid, const varstr *key, 
   if (likely(is_primary_idx)) {
     // update write_set
     ASSERT(tuple->pvalue->size() == tuple->size);
+#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+		next_key_info_t nk_info;
+		memset(&nk_info, 0, sizeof(next_key_info_t));
+		nk_info.ki = -2;
+		add_to_write_set_zigzag(tuple_array->get(oid), key, index->GetDescriptor(), oid, nk_info);
+#else /* HYU_ZIGZAG */
     add_to_write_set(tuple_array->get(oid));
+#endif /* HYU_ZIGZAG */
   }
 }
 

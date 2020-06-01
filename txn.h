@@ -5,6 +5,10 @@
 
 #include <vector>
 
+#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+#include <cstring>
+#endif /* HYU_ZIGZAG */
+
 #include "dbcore/xid.h"
 #include "dbcore/sm-config.h"
 #include "dbcore/sm-oid.h"
@@ -21,14 +25,40 @@ using google::dense_hash_map;
 
 namespace ermia {
 
+#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+struct next_key_info_t {
+	OID oid;
+	Masstree::leaf<masstree_params> *leaf;
+	Masstree::leaf<masstree_params>::permuter_type perm;
+	int ki; // -1 is end of leaf, -2 is insertion case
+};
+#endif /* HYU_ZIGZAG */
+
 // A write-set entry is essentially a pointer to the OID array entry
 // begin updated. The write-set is naturally de-duplicated: repetitive
 // updates will leave only one entry by the first update. Dereferencing
 // the entry pointer results a fat_ptr to the new object.
 struct write_record_t {
   fat_ptr *entry;
+#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+	varstr key;
+	IndexDescriptor *idx_desc;
+	OID oid;
+	next_key_info_t next_key_info;
+	write_record_t(fat_ptr *e, const varstr *k, IndexDescriptor *index_desc,
+								OID o, next_key_info_t nk_info) {
+		entry = e;
+		key.l = k->l;
+		key.p = k->p;
+		idx_desc = index_desc;
+		oid = o;
+		memcpy(&next_key_info, &nk_info, sizeof(next_key_info_t));
+	}
+	write_record_t() : entry(nullptr), idx_desc(nullptr) {}
+#else /* HYU_ZIGZAG */
   write_record_t(fat_ptr *entry) : entry(entry) {}
   write_record_t() : entry(nullptr) {}
+#endif /* HYU_ZIGZAG */
   inline Object *get_object() { return (Object *)entry->offset(); }
 };
 
@@ -37,12 +67,24 @@ struct write_set_t {
   uint32_t num_entries;
   write_record_t entries[kMaxEntries];
   write_set_t() : num_entries(0) {}
+#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+  inline void emplace_back(fat_ptr *oe, const varstr *k,
+													IndexDescriptor *index_desc, OID oid,
+													next_key_info_t next_key_info) {
+    ALWAYS_ASSERT(num_entries < kMaxEntries);
+    new (&entries[num_entries]) write_record_t(oe, k, index_desc, oid,
+																							next_key_info);
+    ++num_entries;
+    ASSERT(entries[num_entries - 1].entry == oe);
+  }
+#else /* HYU_ZIGZAG */
   inline void emplace_back(fat_ptr *oe) {
     ALWAYS_ASSERT(num_entries < kMaxEntries);
     new (&entries[num_entries]) write_record_t(oe);
     ++num_entries;
     ASSERT(entries[num_entries - 1].entry == oe);
   }
+#endif /* HYU_ZIGZAG */
   inline uint32_t size() { return num_entries; }
   inline void clear() { num_entries = 0; }
   inline write_record_t &operator[](uint32_t idx) { return entries[idx]; }
@@ -51,6 +93,8 @@ struct write_set_t {
 class transaction {
   friend class ConcurrentMasstreeIndex;
   friend class sm_oid_mgr;
+	// [HYU]
+	friend class masstree_params;
 
 public:
   typedef TXN::txn_state txn_state;
@@ -117,7 +161,12 @@ protected:
   bool TryInsertNewTuple(OrderedIndex *index, const varstr *key,
                          varstr *value, OID *inserted_oid);
 
+#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+  rc_t Update(IndexDescriptor *index_desc, OID oid, const varstr *k, varstr *v,
+							next_key_info_t next_key_info);
+#else /* HYU_ZIGZAG */
   rc_t Update(IndexDescriptor *index_desc, OID oid, const varstr *k, varstr *v);
+#endif /* HYU_ZIGZAG */
 
  public:
   // Reads the contents of tuple into v within this transaction context
@@ -141,6 +190,22 @@ protected:
     return write_set;
   }
 
+#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+	// oid is for debug
+	inline void add_to_write_set_zigzag(fat_ptr *entry, const varstr *k,
+																			IndexDescriptor *index_desc, OID oid,
+																			next_key_info_t next_key_info) {
+#ifndef NDEBUG
+    auto &write_set = GetWriteSet();
+    for (uint32_t i = 0; i < write_set.size(); ++i) {
+      auto &w = write_set[i];
+      ASSERT(w.entry);
+      ASSERT(w.entry != entry);
+    }
+#endif
+    GetWriteSet().emplace_back(entry, k, index_desc, oid, next_key_info);
+	}
+#else /* HYU_ZIGZAG */
   inline void add_to_write_set(fat_ptr *entry) {
 #ifndef NDEBUG
     auto &write_set = GetWriteSet();
@@ -152,6 +217,7 @@ protected:
 #endif
     GetWriteSet().emplace_back(entry);
   }
+#endif /* HYU_ZIGZAG */
 
   inline TXN::xid_context *GetXIDContext() { return xc; }
 

@@ -191,6 +191,7 @@ struct sm_oid_mgr {
   dbtuple *oid_get_version_zigzag(oid_array *oa, OID o, TXN::xid_context *visitor_xc);
 
 	fat_ptr oid_get_version_zigzag_ptr(oid_array *oa, OID o, TXN::xid_context *visitor_xc);
+	dbtuple *oid_get_version_zigzag_from_ver(fat_ptr ver, TXN::xid_context *visitor_xc);
 #endif /* HYU_ZIGZAG */
 
 #ifdef HYU_DEBUG /* HYU_DEBUG */

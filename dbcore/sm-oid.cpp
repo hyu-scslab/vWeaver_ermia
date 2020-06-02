@@ -699,7 +699,6 @@ bool sm_oid_mgr::SubmitHighwayChain(Object* new_obj, fat_ptr old_ptr) {
 			Object* highway = (Object*)(next->GetHighway().offset());
 			if (highway->GetClsn()._ptr == 0 || highway->GetClsn().asi_type() != fat_ptr::ASI_LOG ||
 					LSN::from_ptr(highway->GetClsn()).offset() != LSN::from_ptr(clsn).offset()) {
-				//printf("[HYU] ???\n");
 				return false;
 			}
 
@@ -718,7 +717,6 @@ bool sm_oid_mgr::SubmitHighwayChain(Object* new_obj, fat_ptr old_ptr) {
 			Object* highway = (Object*)(next->GetHighway().offset());
 			if (highway->GetClsn() == NULL_PTR || highway->GetClsn().asi_type() != fat_ptr::ASI_LOG ||
 					LSN::from_ptr(highway->GetClsn()).offset() != LSN::from_ptr(next->GetHighwayClsn()).offset()) {
-				//printf("[HYU] ??????\n");
 				return false;
 			}
 
@@ -843,6 +841,7 @@ install:
 		new_object->SetHighwayClsn(old_desc->GetHighwayClsn());
 		new_object->SetLevel(old_desc->GetLevel());
 		new_object->SetHighwayLevel(old_desc->GetHighwayLevel());
+		new_object->rec_id = old_desc->rec_id;
 #endif /* HYU_ZIGZAG */
     // I already claimed it, no need to use cas then
     volatile_write(ptr->_ptr, new_obj_ptr->_ptr);
@@ -875,6 +874,7 @@ install:
 			}
 
 			bool submit = SubmitHighwayChain(new_object, head);
+			new_object->rec_id = o;
 #endif /* HYU_ZIGZAG */
 
     if (__sync_bool_compare_and_swap(&ptr->_ptr, head._ptr,
@@ -1438,6 +1438,77 @@ start_over:
 
   return NULL_PTR;  // No Visible records
 }
+
+// For tuple arrays only, i.e., entries are guaranteed to point to Objects.
+dbtuple *sm_oid_mgr::oid_get_version_zigzag_from_ver(fat_ptr ver,
+                                     						TXN::xid_context *visitor_xc) {
+start_over:
+  fat_ptr ptr = ver;
+  ASSERT(ptr.asi_type() == 0);
+  Object *prev_obj = nullptr;
+  while (ptr.offset()) {
+    Object *cur_obj = nullptr;
+		Object *highway_obj = nullptr;
+    // Must read next_ before reading cur_obj->_clsn:
+    // the version we're currently reading (ie cur_obj) might be unlinked
+    // and thus recycled by the memory allocator at any time if it's not
+    // a committed version. If so, cur_obj->_next will be pointing to some
+    // other object in the allocator's free object pool - we'll probably
+    // end up at la-la land if we followed this _next pointer value...
+    // Here we employ some flavor of OCC to solve this problem:
+    // the aborting transaction that will unlink cur_obj will update
+    // cur_obj->_clsn to NULL_PTR, then deallocate(). Before reading
+    // cur_obj->_clsn, we (as the visitor), first dereference pp to get
+    // a stable value that "should" contain the right address of the next
+    // version. We then read cur_obj->_clsn to verify: if it's NULL_PTR
+    // that means we might have read a wrong _next value that's actually
+    // pointing to some irrelevant object in the allocator's memory pool,
+    // hence must start over from the beginning of the version chain.
+    fat_ptr tentative_next = NULL_PTR;
+		fat_ptr tentative_highway = NULL_PTR;
+    // If this is a backup server, then must see persistent_next to find out
+    // the **real** overwritten version.
+    if (config::is_backup_srv() && !config::command_log) {
+			printf("[HYU] we only think about there is no replica\n");
+      oid_get_version_backup(ptr, tentative_next, prev_obj, cur_obj, visitor_xc);
+    } else {
+      ASSERT(ptr.asi_type() == 0);
+      cur_obj = (Object *)ptr.offset();
+      tentative_next = cur_obj->GetNextVolatile();
+			tentative_highway = cur_obj->GetHighway();
+      ASSERT(tentative_next.asi_type() == 0);
+			ASSERT(tentative_highway.asi_type() == 0);
+    }
+
+    bool retry = false;
+    bool visible = TestVisibility(cur_obj, visitor_xc, retry);
+    if (retry) {
+      goto start_over;
+    }
+    if (visible) {
+      return cur_obj->GetPinnedTuple();
+    } else {
+			highway_obj = (Object *)tentative_highway.offset();
+			if (highway_obj == NULL) {
+				ptr = tentative_next;
+				prev_obj = cur_obj;
+				continue;
+			}
+			bool highway_retry = false;
+			bool highway_visible = TestVisibility(highway_obj, visitor_xc, highway_retry);
+
+			if (highway_retry || highway_visible) {
+				ptr = tentative_next;
+			} else {
+				ptr = tentative_highway;
+			}
+			prev_obj = cur_obj;
+		}
+  }
+
+  return nullptr;  // No Visible records
+}
+
 
 #endif /* HYU_ZIGZAG */
 

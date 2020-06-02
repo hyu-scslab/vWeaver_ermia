@@ -2230,8 +2230,8 @@ rc_t tpcc_worker::txn_query2() {
 						const stock::key k_s(it.first, it.second);
 						stock::value v_s_tmp(0, 0, 0, 0);
 						rc = rc_t{RC_INVALID};
-						//[HYU]
 
+						// [HYU] seperate key encoding because of retry_stock tag
 						ermia::varstr key = Encode(str(Size(k_s)), k_s);
 retry_stock:
 						tbl_stock(it.first)->Get(txn, rc, key, valptr);
@@ -2241,7 +2241,7 @@ retry_stock:
 							goto retry_stock;
 						}
 						const stock::value *v_s = Decode(valptr, v_s_tmp);
-						//[HYU]
+						// [HYU] something happen in concurrent situation so we make tag
 						if (v_s == NULL)
 							goto retry_stock;
 

@@ -173,6 +173,7 @@ void gc_version_chain(fat_ptr *oid_entry) {
 				cur_obj->SetLeftShortcut(NULL_PTR);
 				cur_obj->SetLevel(1);
 				cur_obj->SetHighwayLevel(0);
+				cur_obj->rec_id = 0;
 #endif /* HYU_ZIGZAG */
         if (!tls_free_object_pool) {
           tls_free_object_pool = new TlsFreeObjectPool;
@@ -249,6 +250,7 @@ void deallocate(fat_ptr p) {
 	obj->SetLeftShortcut(NULL_PTR);
 	obj->SetLevel(1);
 	obj->SetHighwayLevel(0);
+	obj->rec_id = 0;
 #endif /* HYU_ZIGZAG */
   if (!tls_free_object_pool) {
     tls_free_object_pool = new TlsFreeObjectPool;

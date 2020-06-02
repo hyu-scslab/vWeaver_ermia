@@ -411,7 +411,7 @@ public:
 
   static inline size_t LeafNodeSize() { return sizeof(leaf_type); }
   
-	template <bool Reverse> class low_level_search_range_scanner;
+	//template <bool Reverse> class low_level_search_range_scanner;
 
 private:
   Masstree::basic_table<P> table_;
@@ -424,7 +424,7 @@ private:
   class size_walk_callback;
   template <bool Reverse> class search_range_scanner_base;
   template <bool Reverse> class no_callback_search_range_scanner;
-  //template <bool Reverse> class low_level_search_range_scanner;
+  template <bool Reverse> class low_level_search_range_scanner;
   template <typename F> class low_level_search_range_callback_wrapper;
 };
 
@@ -526,11 +526,6 @@ inline bool mbtree<P>::search_zigzag(const key_type &k, OID &o, OID &next_o,
 		next_leaf = lp.next_;
 		next_perm = lp.next_perm_;
 		next_ki = lp.i_;
-		// [HYU] for debug
-		/*FILE* cmp_fp = fopen("cmp.data", "a+");
-		fprintf(cmp_fp, "o: %u, next_o: %u\n", o, next_o);
-		fflush(cmp_fp);
-		fclose(cmp_fp);*/
   }
   if (search_info) {
     *search_info = versioned_node_t(lp.node(), lp.full_version_value());
@@ -737,7 +732,7 @@ mbtree<P>::search_range_call(const key_type &lower, const key_type *upper,
                              low_level_search_range_callback &callback,
                              TXN::xid_context *xc) const {
   low_level_search_range_scanner<false> scanner(this, upper, callback);
-  threadinfo ti(xc->begin_epoch);
+	 threadinfo ti(xc->begin_epoch);
   table_.scan(lcdf::Str(lower.data(), lower.size()), true, scanner, xc, ti);
 }
 

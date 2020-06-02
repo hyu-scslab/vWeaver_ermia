@@ -98,6 +98,13 @@ private:
   ermia::oid_array *tuple_array_;
   ermia::oid_array *pdest_array_;
 
+#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+  template <typename H, typename F>
+  int scan_zigzag(H helper, Str firstkey, bool matchfirst, F &scanner,
+           ermia::TXN::xid_context *xc, threadinfo &ti) const;
+
+#endif /* HYU_ZIGZAG */
+
   template <typename H, typename F>
   int scan(H helper, Str firstkey, bool matchfirst, F &scanner,
            ermia::TXN::xid_context *xc, threadinfo &ti) const;

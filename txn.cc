@@ -102,7 +102,7 @@ transaction::~transaction() {
 
   // transaction shouldn't fall out of scope w/o resolution
   // resolution means TXN_CMMTD, and TXN_ABRTD
-	// [HYU]
+	// [HYU] change assertion because of we make new state
   ASSERT(state() != TXN::TXN_ACTIVE && state() != TXN::TXN_COMMITTING
 			&& state() != TXN::TXN_ALMOST_COMMIT);
   //ASSERT(state() != TXN::TXN_ACTIVE && state() != TXN::TXN_COMMITTING);
@@ -1172,11 +1172,6 @@ rc_t transaction::si_commit() {
 			/* next_key's location is not moved */
 			next_oid = info_oid;
 			
-			// [HYU] for debug
-			FILE* pass_fp = fopen("pass.data", "a+");
-			fprintf(pass_fp, "pass nkey: %u\n", next_oid);
-			fflush(pass_fp);
-			fclose(pass_fp);
 		} else {
 fail:
 			found = index->masstree_.search_zigzag(w.key, oid, next_oid, next_leaf,
@@ -1184,12 +1179,6 @@ fail:
 		
 			assert(found);
 			assert(oid == w.oid);
-			
-			// [HYU] for debug
-			FILE* fail_fp = fopen("fail.data", "a+");
-			fprintf(fail_fp, "fail nkey: %u\n", next_oid);
-			fflush(fail_fp);
-			fclose(fail_fp);
 		}
 
 		/* install left shortcut to object->next */
@@ -1203,95 +1192,7 @@ fail:
 			shortcut_ptr = oidmgr->oid_get_version_zigzag_ptr(tuple_array, next_oid, &shortcut_xc);
 
 			next_obj->SetLeftShortcut(shortcut_ptr);
-			
-			// [HYU] for debug
-			FILE* sc_fp = fopen("shortcut.data", "a+");
-			fprintf(sc_fp, "shortcut success\n");
-			fflush(sc_fp);
-			fclose(sc_fp);
 		}
-/*
-		ConcurrentMasstreeIndex::DummyCallback callback;
-		lcdf::Str cur_key(w.key.data(), w.key.size());
-
-		typedef simple_threadinfo threadinfo;
-		threadinfo ti(xc->begin_epoch);
-		Masstree::forward_scan_helper helper;
-		ConcurrentMasstree::low_level_search_range_scanner<false> scanner(&index->masstree_, nullptr, callback);
-		typedef typename masstree_params::ikey_type ikey_type;
-		typedef typename Masstree::node_base<masstree_params>::key_type key_type;
-		typedef typename Masstree::leafvalue<masstree_params> leafvalue_type;
-		union {
-			ikey_type
-					x[(MASSTREE_MAXKEYLEN + sizeof(ikey_type) - 1) / sizeof(ikey_type)];
-			char s[MASSTREE_MAXKEYLEN];
-		} keybuf;
-		masstree_precondition(cur_key.len <= (int)sizeof(keybuf));
-		memcpy(keybuf.s, cur_key.s, cur_key.len);
-		key_type ka(keybuf.s, cur_key.len);
-
-		typedef Masstree::scanstackelt<masstree_params> mystack_type;
-		mystack_type
-				stack[(MASSTREE_MAXKEYLEN + sizeof(ikey_type) - 1) / sizeof(ikey_type)];
-		int stackpos = 0;
-		Masstree::basic_table<masstree_params> *table = (Masstree::basic_table<masstree_params>*)index->GetTable();
-		stack[0].root_ = (Masstree::node_base<masstree_params>*)table->root();
-		leafvalue_type entry = leafvalue_type::make_empty();
-
-		int scancount = 0;
-		int state;
-
-		while (1) {
-			state = stack[stackpos].find_initial(helper, ka, true, entry, ti);
-			scanner.visit_leaf(stack[stackpos], ka, ti);
-			if (state != mystack_type::scan_down) {
-				assert(state == mystack_type::scan_emit);
-				break;
-			}
-			ka.shift();
-			++stackpos;
-		}
-		OID chk = entry.value();
-		assert(chk == w.oid);
-		int cnt = 0; // cnt must 2 when break while loop
-
-		while (cnt != 2) {
-			switch (state) {
-			case mystack_type::scan_emit: { // surpress cross init warning about v
-				OID o = entry.value();
-
-				stack[stackpos].ki_ = helper.next(stack[stackpos].ki_);
-				state = stack[stackpos].find_next(helper, ka, entry);
-				cnt++;
-			} break;
-
-			case mystack_type::scan_find_next:
-			find_next:
-				state = stack[stackpos].find_next(helper, ka, entry);
-				if (state != mystack_type::scan_up)
-					scanner.visit_leaf(stack[stackpos], ka, ti);
-				break;
-
-			case mystack_type::scan_up:
-				do {
-					if (--stackpos < 0)
-						goto done;
-					ka.unshift();
-					stack[stackpos].ki_ = helper.next(stack[stackpos].ki_);
-				} while (unlikely(ka.empty()));
-				goto find_next;
-
-			case mystack_type::scan_down:
-				helper.shift_clear(ka);
-				++stackpos;
-				goto retry;
-
-			case mystack_type::scan_retry:
-			retry:
-				state = stack[stackpos].find_retry(helper, ka, ti);
-				break;
-			}
-		}*/
 commit_ts:
 
 #endif /* HYU_ZIGZAG */

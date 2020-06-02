@@ -19,7 +19,7 @@ enum txn_state {
   TXN_CMMTD,
   TXN_ABRTD,
   TXN_INVALID,
-	// [HYU]
+	// [HYU] new txn state
 	TXN_ALMOST_COMMIT
 };
 
@@ -137,7 +137,7 @@ inline XID take_one(thread_data *t) {
 #endif
   // Note: transaction needs to initialize xc->begin in ctor
   contexts[id].end = 0;
-	// [HYU]
+	// [HYU] change assertion because we make new state
 	ASSERT(contexts[id].state != TXN_COMMITTING ||
 			contexts[id].state != TXN_ALMOST_COMMIT);
   //ASSERT(contexts[id].state != TXN_COMMITTING);

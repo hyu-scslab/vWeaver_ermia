@@ -93,8 +93,6 @@ struct write_set_t {
 class transaction {
   friend class ConcurrentMasstreeIndex;
   friend class sm_oid_mgr;
-	// [HYU]
-	friend class masstree_params;
 
 public:
   typedef TXN::txn_state txn_state;

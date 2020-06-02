@@ -149,24 +149,8 @@ class ConcurrentMasstreeIndex : public OrderedIndex {
   friend class sm_log_recover_impl;
   friend class sm_chkpt_mgr;
 
-#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
-public:
-  struct DummyCallback
-      : public ConcurrentMasstree::low_level_search_range_callback {
-    DummyCallback() = default;
-
-    virtual void
-    on_resp_node(const typename ConcurrentMasstree::node_opaque_t *n,
-                 uint64_t version);
-    virtual bool invoke(const ConcurrentMasstree *btr_ptr,
-                        const typename ConcurrentMasstree::string_type &k,
-                        dbtuple *v,
-                        const typename ConcurrentMasstree::node_opaque_t *n,
-                        uint64_t version);
-
-  };
-#endif /* HYU_ZIGZAG */
 private:
+	// [HYU] go public member
   //ConcurrentMasstree masstree_;
 
   struct SearchRangeCallback {

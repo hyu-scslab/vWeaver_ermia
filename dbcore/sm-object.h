@@ -151,5 +151,8 @@ class Object {
 	
 	// HYU_GC
 	uint64_t HYU_gc_candidate_clsn_;
+#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+	OID rec_id;
+#endif /* HYU_ZIGZAG */
 };
 }  // namespace ermia

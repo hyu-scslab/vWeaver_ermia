@@ -87,6 +87,7 @@ rc_t ConcurrentMasstreeIndex::Scan(transaction *t, const varstr &start_key,
                                    ScanCallback &callback, str_arena *arena) {
   MARK_REFERENCED(arena);
   SearchRangeCallback c(callback);
+	
   ASSERT(c.return_code._val == RC_FALSE);
 
   t->ensure_active();
@@ -183,17 +184,6 @@ retry_get:
 						oidmgr->oid_get_version_zigzag_debug(descriptor_->GetTupleArray(), oid, t->xc, &zigzag_cnt);
 #else /* HYU_DEBUG */
 						oidmgr->oid_get_version_zigzag(descriptor_->GetTupleArray(), oid, t->xc);
-#endif /* HYU_DEBUG */
-
-#ifdef HYU_DEBUG /* HYU_DEBUG */
-				if (point_cnt > zigzag_cnt) {
-					FILE* cnt_fp = fopen("cnt.data", "a+");
-					fprintf(cnt_fp, "point_cnt: %ld, zigzag_cnt: %ld\n", point_cnt, zigzag_cnt);
-					fflush(cnt_fp);
-					fclose(cnt_fp);
-				} else if (point_cnt < zigzag_cnt) {
-					printf("why??? GET %ld %ld\n", point_cnt, zigzag_cnt);
-				}
 #endif /* HYU_DEBUG */
 
 				if (tuple != zigzag_tuple) {
@@ -327,21 +317,6 @@ rc_t ConcurrentMasstreeIndex::DoNodeRead(
   }
   return rc_t{RC_TRUE};
 }
-
-#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
-void ConcurrentMasstreeIndex::DummyCallback::on_resp_node(
-    const typename ConcurrentMasstree::node_opaque_t *n, uint64_t version) {
-
-}
-
-bool ConcurrentMasstreeIndex::DummyCallback::invoke(
-    const ConcurrentMasstree *btr_ptr,
-    const typename ConcurrentMasstree::string_type &k, dbtuple *v,
-    const typename ConcurrentMasstree::node_opaque_t *n, uint64_t version) {
-	return true;
-}
-
-#endif /* HYU_ZIGZAG */
 
 void ConcurrentMasstreeIndex::XctSearchRangeCallback::on_resp_node(
     const typename ConcurrentMasstree::node_opaque_t *n, uint64_t version) {

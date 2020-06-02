@@ -41,7 +41,7 @@ public:
     return n.n_->compare_key(k, p);
   }
 
-// [HYU] make public for using txn.cc
+// [HYU] make public for using zigzag_move
 public:
 //private:
   node_base<P> *root_;
@@ -278,6 +278,173 @@ changed:
   return scan_find_next;
 }
 
+#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+template <typename P>
+template <typename H, typename F>
+int basic_table<P>::scan_zigzag(H helper, Str firstkey, bool emit_firstkey, F &scanner,
+                         ermia::TXN::xid_context *xc, threadinfo &ti) const {
+  typedef typename P::ikey_type ikey_type;
+  typedef typename node_type::key_type key_type;
+  typedef typename node_type::leaf_type::leafvalue_type leafvalue_type;
+  union {
+    ikey_type
+        x[(MASSTREE_MAXKEYLEN + sizeof(ikey_type) - 1) / sizeof(ikey_type)];
+    char s[MASSTREE_MAXKEYLEN];
+  } keybuf;
+  masstree_precondition(firstkey.len <= (int)sizeof(keybuf));
+  memcpy(keybuf.s, firstkey.s, firstkey.len);
+  key_type ka(keybuf.s, firstkey.len);
+
+  typedef scanstackelt<param_type> mystack_type;
+  mystack_type
+      stack[(MASSTREE_MAXKEYLEN + sizeof(ikey_type) - 1) / sizeof(ikey_type)];
+  int stackpos = 0;
+  stack[0].root_ = root_;
+  leafvalue_type entry = leafvalue_type::make_empty();
+
+  int scancount = 0;
+  int state;
+
+  while (1) {
+    state = stack[stackpos].find_initial(helper, ka, emit_firstkey, entry, ti);
+    scanner.visit_leaf(stack[stackpos], ka, ti);
+    if (state != mystack_type::scan_down)
+      break;
+    ka.shift();
+    ++stackpos;
+  }
+
+  while (1) {
+    switch (state) {
+    case mystack_type::scan_emit: { // surpress cross init warning about v
+      ++scancount;
+      ermia::dbtuple *v = NULL;
+			ermia::dbtuple *shortcut_v = NULL;
+			ermia::dbtuple *chk_v = NULL;
+			ermia::Object *obj = nullptr;
+			ermia::Object *shortcut_obj = nullptr;
+			ermia::fat_ptr shortcut_ptr = ermia::NULL_PTR;
+			ermia::OID zigzag_o = 0;
+			ermia::OID chk_o = 0;
+
+      ermia::OID o = entry.value();
+      if (ermia::config::is_backup_srv()) {
+        v = ermia::oidmgr->BackupGetVersion(tuple_array_, pdest_array_, o, xc);
+      } else {
+				v = ermia::oidmgr->oid_get_version_zigzag(tuple_array_, o, xc);
+      }
+      if (v) {
+        if (!scanner.visit_value(ka, v))
+          goto done;
+				obj = (ermia::Object*)v->GetObject();
+				shortcut_ptr = obj->GetLeftShortcut();
+      }
+
+			// [HYU] zigzag move
+			while (shortcut_ptr != ermia::NULL_PTR) {
+				++scancount;
+	      
+				stack[stackpos].ki_ = helper.next(stack[stackpos].ki_);
+  	    state = stack[stackpos].find_next(helper, ka, entry);	
+
+				shortcut_v = ermia::oidmgr->oid_get_version_zigzag_from_ver(shortcut_ptr, xc);
+
+				if (shortcut_v && !scanner.visit_value(ka, shortcut_v))
+					goto done;
+
+chk_again:
+				while (1) {
+					switch (state) {
+					case mystack_type::scan_emit:
+						goto keep_going;
+				  case mystack_type::scan_find_next:
+					find_next_zigzag:
+						state = stack[stackpos].find_next(helper, ka, entry);
+						if (state != mystack_type::scan_up)
+							scanner.visit_leaf(stack[stackpos], ka, ti);
+						break;
+
+					case mystack_type::scan_up:
+						do {
+							if (--stackpos < 0)
+								goto done;
+							ka.unshift();
+							stack[stackpos].ki_ = helper.next(stack[stackpos].ki_);
+						} while (unlikely(ka.empty()));
+						goto find_next_zigzag;
+
+					case mystack_type::scan_down:
+						helper.shift_clear(ka);
+						++stackpos;
+						goto retry_zigzag;
+
+					case mystack_type::scan_retry:
+					retry_zigzag:
+						state = stack[stackpos].find_retry(helper, ka, ti);
+						break;
+
+					}
+				}
+keep_going:
+
+				if (shortcut_v) {
+					shortcut_obj = (ermia::Object*)shortcut_v->GetObject();
+					zigzag_o = shortcut_obj->rec_id;
+					chk_o = entry.value();
+					//while (zigzag_o != chk_o) {
+					if (zigzag_o != chk_o) {
+						chk_v = ermia::oidmgr->oid_get_version_zigzag(tuple_array_, chk_o, xc);
+						assert(chk_v == nullptr);
+						state = stack[stackpos].find_next(helper, ka, entry);
+						goto chk_again;
+					}
+					//assert(zigzag_o == chk_o);
+					chk_v = ermia::oidmgr->oid_get_version_zigzag(tuple_array_, o, xc);
+					assert(chk_v == shortcut_v);
+				}
+
+				obj = (ermia::Object*)shortcut_v->GetObject();
+				shortcut_ptr = obj->GetLeftShortcut();
+			}
+
+      stack[stackpos].ki_ = helper.next(stack[stackpos].ki_);
+      state = stack[stackpos].find_next(helper, ka, entry);
+    } break;
+
+    case mystack_type::scan_find_next:
+    find_next:
+      state = stack[stackpos].find_next(helper, ka, entry);
+      if (state != mystack_type::scan_up)
+        scanner.visit_leaf(stack[stackpos], ka, ti);
+      break;
+
+    case mystack_type::scan_up:
+      do {
+        if (--stackpos < 0)
+          goto done;
+        ka.unshift();
+        stack[stackpos].ki_ = helper.next(stack[stackpos].ki_);
+      } while (unlikely(ka.empty()));
+      goto find_next;
+
+    case mystack_type::scan_down:
+      helper.shift_clear(ka);
+      ++stackpos;
+      goto retry;
+
+    case mystack_type::scan_retry:
+    retry:
+      state = stack[stackpos].find_retry(helper, ka, ti);
+      break;
+    }
+  }
+
+done:
+  return scancount;
+}
+
+#endif /* HYU_ZIGZAG */
+
 template <typename P>
 template <typename H, typename F>
 int basic_table<P>::scan(H helper, Str firstkey, bool emit_firstkey, F &scanner,
@@ -346,16 +513,6 @@ retry_rq:
 					goto retry_rq;
 				}
 
-#ifdef HYU_DEBUG /* HYU_DEBUG */
-				if (point_cnt > zigzag_cnt) {
-					FILE* rqcnt_fp = fopen("rqcnt.data", "a+");
-					fprintf(rqcnt_fp, "point_cnt: %ld, zigzag_cnt: %ld\n", point_cnt, zigzag_cnt);
-					fflush(rqcnt_fp);
-					fclose(rqcnt_fp);
-				} else if (point_cnt < zigzag_cnt) {
-					printf("why??? RQ %ld %ld\n", point_cnt, zigzag_cnt);
-				}
-#endif /* HYU_DEBUG */
 #endif /* HYU_ZIGZAG */
       }
       if (v) {
@@ -402,7 +559,11 @@ template <typename P>
 template <typename F>
 int basic_table<P>::scan(Str firstkey, bool emit_firstkey, F &scanner,
                          ermia::TXN::xid_context *xc, threadinfo &ti) const {
+#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+  return scan_zigzag(forward_scan_helper(), firstkey, emit_firstkey, scanner, xc, ti);
+#else /* HYU_ZIGZAG */
   return scan(forward_scan_helper(), firstkey, emit_firstkey, scanner, xc, ti);
+#endif /* HYU_ZIGZAG */
 }
 
 template <typename P>

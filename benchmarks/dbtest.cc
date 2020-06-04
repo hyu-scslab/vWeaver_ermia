@@ -31,7 +31,8 @@ DEFINE_string(log_data_dir, "/tmpfs/ermia-log", "Log directory.");
 DEFINE_uint64(log_segment_mb, 8192, "Log segment size in MB.");
 DEFINE_uint64(log_buffer_mb, 128, "Log buffer size in MB.");
 DEFINE_bool(log_ship_by_rdma, false, "Whether to use RDMA for log shipping.");
-DEFINE_bool(phantom_prot, false, "Whether to enable phantom protection.");
+// phantom prot default is false
+DEFINE_bool(phantom_prot, true, "Whether to enable phantom protection.");
 DEFINE_uint64(read_view_stat_interval_ms, 0,
   "Time interval between two outputs of read view LSN in milliseconds."
   "0 means do not output");

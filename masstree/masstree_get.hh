@@ -59,6 +59,8 @@ forward:
 		} else {
   		next_ = n_->safe_next();
 			if (next_) {
+				next_->prefetch();
+				next_v_ = next_->stable();
 				next_perm_ = next_->permutation();
 				i_ = 0;
 				lv_next_ = next_->lv_[next_perm_[i_]];

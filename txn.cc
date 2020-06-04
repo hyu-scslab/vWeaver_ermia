@@ -1426,6 +1426,10 @@ OID transaction::PrepareInsert(OrderedIndex *index, varstr *value, dbtuple **out
     ASSERT(decode_size_aligned(new_head.size_code()) >= (*out_tuple)->size);
     (*out_tuple)->GetObject()->SetClsn(xid.to_ptr());
     oid = oidmgr->alloc_oid(tuple_fid);
+#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+		Object* new_head_obj = (Object*)new_head.offset();
+		new_head_obj->rec_id = oid;
+#endif /* HYU_ZIGZAG */
     oidmgr->oid_put_new(tuple_array, oid, new_head);
   } else {
     // Inserting into a secondary index - just key-OID mapping is enough

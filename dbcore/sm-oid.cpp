@@ -705,8 +705,10 @@ bool sm_oid_mgr::SubmitHighwayChain(Object* new_obj, fat_ptr old_ptr) {
 			if ((uint64_t)highway->GetLevel() < my_level) return false;
 
 			new_object->SetHighway(next->GetHighway());
-			new_object->SetHighwayClsn(next->GetHighwayClsn());
-			new_object->SetHighwayLevel(next->GetHighwayLevel());
+			new_object->SetHighwayClsn(highway->GetClsn());
+			new_object->SetHighwayLevel(highway->GetLevel());
+			//new_object->SetHighwayClsn(next->GetHighwayClsn());
+			//new_object->SetHighwayLevel(next->GetHighwayLevel());
 
 			return true;
 		} else {

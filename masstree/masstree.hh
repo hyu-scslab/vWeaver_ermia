@@ -72,9 +72,16 @@ public:
 
   bool get(Str key, value_type &value, threadinfo &ti) const;
 
+#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+  template <typename F>
+  int scan(Str firstkey, bool matchfirst, F &scanner,
+           ermia::TXN::xid_context *xc, threadinfo &ti,
+					 bool is_primary_idx) const;
+#else /* HYU_ZIGZAG */
   template <typename F>
   int scan(Str firstkey, bool matchfirst, F &scanner,
            ermia::TXN::xid_context *xc, threadinfo &ti) const;
+#endif /* HYU_ZIGZAG */
   template <typename F>
   int rscan(Str firstkey, bool matchfirst, F &scanner,
             ermia::TXN::xid_context *xc, threadinfo &ti) const;
@@ -101,7 +108,7 @@ private:
 #ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
   template <typename H, typename F>
   int scan_zigzag(H helper, Str firstkey, bool matchfirst, F &scanner,
-           ermia::TXN::xid_context *xc, threadinfo &ti) const;
+           ermia::TXN::xid_context *xc, threadinfo &ti, bool pr) const;
 
 #endif /* HYU_ZIGZAG */
 

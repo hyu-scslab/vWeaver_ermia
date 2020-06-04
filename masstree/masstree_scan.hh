@@ -230,8 +230,10 @@ template <typename H>
 int scanstackelt<P>::find_next(H &helper, key_type &ka, leafvalue_type &entry) {
   int kp;
 
-  if (v_.deleted())
+  if (v_.deleted()) {
+		printf("delete?\n");
     return scan_retry;
+	}
 
 retry_entry:
   kp = this->kp(); // perm_[ki]
@@ -282,7 +284,7 @@ changed:
 template <typename P>
 template <typename H, typename F>
 int basic_table<P>::scan_zigzag(H helper, Str firstkey, bool emit_firstkey, F &scanner,
-                         ermia::TXN::xid_context *xc, threadinfo &ti) const {
+                         ermia::TXN::xid_context *xc, threadinfo &ti, bool pr) const {
   typedef typename P::ikey_type ikey_type;
   typedef typename node_type::key_type key_type;
   typedef typename node_type::leaf_type::leafvalue_type leafvalue_type;
@@ -314,7 +316,7 @@ int basic_table<P>::scan_zigzag(H helper, Str firstkey, bool emit_firstkey, F &s
     ++stackpos;
   }
 
-  while (1) {
+	while (1) {
     switch (state) {
     case mystack_type::scan_emit: { // surpress cross init warning about v
       ++scancount;
@@ -341,11 +343,17 @@ int basic_table<P>::scan_zigzag(H helper, Str firstkey, bool emit_firstkey, F &s
       }
 
 			// [HYU] zigzag move
-			while (shortcut_ptr != ermia::NULL_PTR) {
+			while (pr && shortcut_ptr != ermia::NULL_PTR) {
+				shortcut_obj = (ermia::Object*)shortcut_ptr.offset();
+				if (shortcut_obj->rec_id == 0) // is deleted
+					break;
+
 				++scancount;
 	      
 				stack[stackpos].ki_ = helper.next(stack[stackpos].ki_);
-  	    state = stack[stackpos].find_next(helper, ka, entry);	
+				//printf("start ki: %d\n", stack[stackpos].ki_);
+  	    state = stack[stackpos].find_next(helper, ka, entry);
+				//printf("before ki: %d, before leaf: %p, state:%d\n", stack[stackpos].ki_, stack[stackpos].n_, state);
 
 				shortcut_v = ermia::oidmgr->oid_get_version_zigzag_from_ver(shortcut_ptr, xc);
 
@@ -391,16 +399,16 @@ keep_going:
 					shortcut_obj = (ermia::Object*)shortcut_v->GetObject();
 					zigzag_o = shortcut_obj->rec_id;
 					chk_o = entry.value();
-					//while (zigzag_o != chk_o) {
 					if (zigzag_o != chk_o) {
-						chk_v = ermia::oidmgr->oid_get_version_zigzag(tuple_array_, chk_o, xc);
-						assert(chk_v == nullptr);
+						//chk_v = ermia::oidmgr->oid_get_version_zigzag(tuple_array_, chk_o, xc);
+						//printf("after ki: %d, after leaf: %p\n", stack[stackpos].ki_, stack[stackpos].n_);
+						//assert(chk_v == nullptr);
 						state = stack[stackpos].find_next(helper, ka, entry);
 						goto chk_again;
 					}
-					//assert(zigzag_o == chk_o);
-					chk_v = ermia::oidmgr->oid_get_version_zigzag(tuple_array_, o, xc);
-					assert(chk_v == shortcut_v);
+					assert(zigzag_o == chk_o);
+					//chk_v = ermia::oidmgr->oid_get_version_zigzag(tuple_array_, o, xc);
+					//assert(chk_v == shortcut_v);
 				}
 
 				obj = (ermia::Object*)shortcut_v->GetObject();
@@ -555,16 +563,23 @@ done:
   return scancount;
 }
 
+#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+template <typename P>
+template <typename F>
+int basic_table<P>::scan(Str firstkey, bool emit_firstkey, F &scanner,
+                         ermia::TXN::xid_context *xc, threadinfo &ti,
+												 bool is_primary_idx) const {
+  return scan_zigzag(forward_scan_helper(), firstkey, emit_firstkey,
+										scanner, xc, ti, is_primary_idx);
+}
+#else /* HYU_ZIGZAG */
 template <typename P>
 template <typename F>
 int basic_table<P>::scan(Str firstkey, bool emit_firstkey, F &scanner,
                          ermia::TXN::xid_context *xc, threadinfo &ti) const {
-#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
-  return scan_zigzag(forward_scan_helper(), firstkey, emit_firstkey, scanner, xc, ti);
-#else /* HYU_ZIGZAG */
   return scan(forward_scan_helper(), firstkey, emit_firstkey, scanner, xc, ti);
-#endif /* HYU_ZIGZAG */
 }
+#endif /* HYU_ZIGZAG */
 
 template <typename P>
 template <typename F>

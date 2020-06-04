@@ -696,7 +696,9 @@ public:
     return callback_.invoke(key.full_string(), oid, this->v_);
   }
 
-private:
+// [HYU] for chk
+//private:
+public:
   Masstree::leaf<P> *n_;
   uint64_t v_;
   low_level_search_range_callback &callback_;
@@ -732,8 +734,13 @@ mbtree<P>::search_range_call(const key_type &lower, const key_type *upper,
                              low_level_search_range_callback &callback,
                              TXN::xid_context *xc) const {
   low_level_search_range_scanner<false> scanner(this, upper, callback);
-	 threadinfo ti(xc->begin_epoch);
+	threadinfo ti(xc->begin_epoch);
+#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+	bool pr = is_primary_idx_;
+  table_.scan(lcdf::Str(lower.data(), lower.size()), true, scanner, xc, ti, pr);
+#else /* HYU_ZIGZAG */
   table_.scan(lcdf::Str(lower.data(), lower.size()), true, scanner, xc, ti);
+#endif /* HYU_ZIGZAG */
 }
 
 template <typename P>

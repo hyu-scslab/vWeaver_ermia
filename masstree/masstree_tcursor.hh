@@ -78,6 +78,7 @@ class unlocked_tcursor {
   const node_base<P>* root_;
 #ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
 	leaf<P>* next_;
+  typename leaf<P>::nodeversion_type next_v_;
 	int i_;
 	permuter_type next_perm_;
 	leafvalue<P> lv_next_;

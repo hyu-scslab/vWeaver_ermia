@@ -3,6 +3,10 @@
 
 #include <map>
 
+#ifdef HYU_EVAL /* HYU_EVAL */
+#include <sys/times.h>
+#endif /* HYU_EVAL */
+
 #include "../ermia.h"
 #include "../txn.h"
 #include "../util.h"
@@ -676,7 +680,7 @@ bool sm_oid_mgr::SubmitHighwayChain(Object* new_obj, fat_ptr old_ptr) {
 		if (watermark > LSN::from_ptr(clsn).offset())
 			return false;
 
-		assert(next->GetClsn().asi_type() == fat_ptr::ASI_LOG);
+		ASSERT(next->GetClsn().asi_type() == fat_ptr::ASI_LOG);
 
 		new_object->SetHighway(next_ptr);
 		new_object->SetHighwayClsn(next->GetClsn());
@@ -687,12 +691,13 @@ bool sm_oid_mgr::SubmitHighwayChain(Object* new_obj, fat_ptr old_ptr) {
 
 	while (1) {
 		hw_level = (uint64_t)next->GetHighwayLevel();
-		
+
 		if (hw_level >= my_level) {
 
 			clsn = next->GetHighwayClsn();
 
-			if (watermark > LSN::from_ptr(clsn).offset())
+			if (clsn.asi_type() != fat_ptr::ASI_LOG ||
+					watermark > LSN::from_ptr(clsn).offset())
 				return false;
 		
 			// if new version try to set highway with GCed object, stop
@@ -747,16 +752,20 @@ fat_ptr sm_oid_mgr::PrimaryTupleUpdate(oid_array *oa, OID o,
                                        TXN::xid_context *updater_xc,
                                        fat_ptr *new_obj_ptr) {
   ASSERT(!config::is_backup_srv() || (config::command_log && config::replay_threads));
-  auto *ptr = oa->get(o);
+	auto *ptr = oa->get(o);
 start_over:
   fat_ptr head = volatile_read(*ptr);
   ASSERT(head.asi_type() == 0);
   Object *old_desc = (Object *)head.offset();
-  ASSERT(old_desc);
+	Object *for_debug = old_desc;
+  ASSERT(old_desc != nullptr);
   ASSERT(head.size_code() != INVALID_SIZE_CODE);
   dbtuple *version = (dbtuple *)old_desc->GetPayload();
   bool overwrite = false;
 
+	if (old_desc == nullptr) {
+		return NULL_PTR;
+	}
   auto clsn = old_desc->GetClsn();
   if (clsn == NULL_PTR) {
     // stepping on an unlinked version?
@@ -833,7 +842,7 @@ install:
   Object *new_object = (Object *)new_obj_ptr->offset();
   new_object->SetClsn(updater_xc->owner.to_ptr());
 	// HYU_GC
-	new_object->HYU_gc_candidate_clsn_ = volatile_read(MM::gc_lsn);
+	//new_object->HYU_gc_candidate_clsn_ = volatile_read(MM::gc_lsn);
 	// HYU_GC end
   if (overwrite) {
     new_object->SetNextPersistent(old_desc->GetNextPersistent());
@@ -858,6 +867,14 @@ install:
     new_object->SetNextVolatile(head);
 
 #ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+#ifdef HYU_EVAL /* HYU_EVAL */
+		uint64_t start_time, latency;
+		struct timeval vridgy_time;
+		if (!updater_xc->xct->check) {
+			gettimeofday(&vridgy_time, NULL);
+			start_time = (uint64_t)vridgy_time.tv_usec;
+		}
+#endif /* HYU_EVAL */
 			// In this case, we have to set highway shortcut
 			int go_up = new_object->TossCoin(pa._ptr);
 			uint8_t lv;
@@ -877,10 +894,22 @@ install:
 
 			bool submit = SubmitHighwayChain(new_object, head);
 			new_object->rec_id = o;
+			__sync_synchronize();
 #endif /* HYU_ZIGZAG */
 
     if (__sync_bool_compare_and_swap(&ptr->_ptr, head._ptr,
                                      new_obj_ptr->_ptr)) {
+#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+#ifdef HYU_EVAL /* HYU_EVAL */
+			if (!updater_xc->xct->check) {
+				gettimeofday(&vridgy_time, NULL);
+				latency = (uint64_t)vridgy_time.tv_usec - start_time;
+				updater_xc->xct->vridgy_cost = latency;
+			}
+			//fprintf(updater_xc->xct->fp, "vridgy cost: %ld, ", latency);
+			//fflush(updater_xc->xct->fp);
+#endif /* HYU_EVAL */
+#endif /* HYU_ZIGZAG */
       // Succeeded installing a new version, now only I can modify the
       // chain, try recycle some objects
       if (config::enable_gc) {
@@ -1268,6 +1297,7 @@ start_over:
 			return cur_obj->GetPinnedTuple();
     } else {
 			highway_obj = (Object *)tentative_highway.offset();
+
 			if (highway_obj == NULL) {
 				ptr = tentative_next;
 				prev_obj = cur_obj;
@@ -1275,6 +1305,17 @@ start_over:
 				zigzag_cnt++;
 				continue;
 			}
+
+			fat_ptr hw_clsn = highway_obj->GetClsn();
+			// is GCed?
+			if (hw_clsn.asi_type() != fat_ptr::ASI_LOG || hw_clsn.asi_type() != fat_ptr::ASI_XID ||
+					LSN::from_ptr(hw_clsn).offset() > LSN::from_ptr(cur_obj->GetClsn()).offset()) {
+				ptr = tentative_next;
+				prev_obj = cur_obj;
+				continue;
+				//return nullptr;
+			}
+
 			bool highway_retry = false;
 			bool highway_visible = TestVisibility(highway_obj, visitor_xc, highway_retry);
 	
@@ -1350,11 +1391,23 @@ start_over:
       return cur_obj->GetPinnedTuple();
     } else {
 			highway_obj = (Object *)tentative_highway.offset();
+
 			if (highway_obj == NULL) {
 				ptr = tentative_next;
 				prev_obj = cur_obj;
 				continue;
 			}
+
+			fat_ptr hw_clsn = highway_obj->GetClsn();
+			// is GCed?
+			if (hw_clsn.asi_type() != fat_ptr::ASI_LOG || hw_clsn.asi_type() != fat_ptr::ASI_XID ||
+					LSN::from_ptr(hw_clsn).offset() > LSN::from_ptr(cur_obj->GetClsn()).offset()) {
+				ptr = tentative_next;
+				prev_obj = cur_obj;
+				continue;
+				//return nullptr;
+			}
+
 			bool highway_retry = false;
 			bool highway_visible = TestVisibility(highway_obj, visitor_xc, highway_retry);
 
@@ -1421,11 +1474,23 @@ start_over:
       return ptr;
     } else {
 			highway_obj = (Object *)tentative_highway.offset();
+
 			if (highway_obj == NULL) {
 				ptr = tentative_next;
 				prev_obj = cur_obj;
 				continue;
 			}
+
+			fat_ptr hw_clsn = highway_obj->GetClsn();
+			// is GCed?
+			if (hw_clsn.asi_type() != fat_ptr::ASI_LOG || hw_clsn.asi_type() != fat_ptr::ASI_XID ||
+					LSN::from_ptr(hw_clsn).offset() > LSN::from_ptr(cur_obj->GetClsn()).offset()) {
+				ptr = tentative_next;
+				prev_obj = cur_obj;
+				continue;
+				//return NULL_PTR;
+			}
+
 			bool highway_retry = false;
 			bool highway_visible = TestVisibility(highway_obj, visitor_xc, highway_retry);
 
@@ -1491,11 +1556,23 @@ start_over:
       return cur_obj->GetPinnedTuple();
     } else {
 			highway_obj = (Object *)tentative_highway.offset();
+
 			if (highway_obj == NULL) {
 				ptr = tentative_next;
 				prev_obj = cur_obj;
 				continue;
 			}
+
+			fat_ptr hw_clsn = highway_obj->GetClsn();
+			// is GCed?
+			if (hw_clsn.asi_type() != fat_ptr::ASI_LOG || hw_clsn.asi_type() != fat_ptr::ASI_XID ||
+					LSN::from_ptr(hw_clsn).offset() > LSN::from_ptr(cur_obj->GetClsn()).offset()) {
+				ptr = tentative_next;
+				prev_obj = cur_obj;
+				continue;
+				//return nullptr;
+			}
+
 			bool highway_retry = false;
 			bool highway_visible = TestVisibility(highway_obj, visitor_xc, highway_retry);
 
@@ -1591,7 +1668,7 @@ bool sm_oid_mgr::TestVisibility(Object *object, TXN::xid_context *xc, bool &retr
 					retry = true;
 					return false;
 				}
-				assert(state == TXN::TXN_ALMOST_COMMIT || state == TXN::TXN_CMMTD);
+				ASSERT(state == TXN::TXN_ALMOST_COMMIT || state == TXN::TXN_CMMTD);
 			}
 			// [HYU] end
 #if defined(RC) || defined(RC_SPIN)

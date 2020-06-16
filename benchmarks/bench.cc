@@ -112,7 +112,7 @@ bool bench_worker::finish_workload(rc_t ret, uint32_t workload_idx, util::timer 
 
 void bench_worker::MyWork(char *) {
   if (is_worker) {
-		bool start_flag = false;
+		//bool start_flag = false;
     workload = get_workload();
     txn_counts.resize(workload.size());
     barrier_a->count_down();
@@ -120,17 +120,19 @@ void bench_worker::MyWork(char *) {
     while (running) {
 			if (get_worker_id() == ermia::config::worker_threads) {
 				//printf("hi i'm worker %d\n", get_worker_id());
-				if (start_flag == false) {
-					do_workload_function(5);
-					start_flag = true;
-				}
-				continue;
+				//if (start_flag == false) {
+				//if (--Q2_count >= 0) {
+					//do_workload_function(5);
+					//start_flag = true;
+				//}
+				//continue;
 			}
 
       double d = r.next_uniform();
       for (size_t i = 0; i < workload.size(); i++) {
         if ((i + 1) == workload.size() || d < workload[i].frequency) {
 					if (!workload[i].name.compare("Query2")) {
+						Q2_count++;	
 						break;
 					}
           do_workload_function(i);

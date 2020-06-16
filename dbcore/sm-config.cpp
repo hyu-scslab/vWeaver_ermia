@@ -29,17 +29,17 @@ int wait_for_backups = 0;
 int num_backups = 0;
 std::atomic<uint32_t> num_active_backups(0);
 uint64_t log_buffer_mb = 128;
-uint64_t log_segment_mb = 8192;
+uint64_t log_segment_mb = 131072; // default is 8192
 uint32_t log_redo_partitions = 0;
 std::string log_dir("");
-bool null_log_device = false;
+bool null_log_device = true; // default is false
 bool truncate_at_bench_start = false;
 std::string primary_srv("");
 std::string primary_port("10000");
 bool htt_is_on = true;
 bool physical_workers_only = true;
 bool print_cpu_util = false;
-uint64_t node_memory_gb = 150; // default is 12
+uint64_t node_memory_gb = 600; // default is 12
 bool log_ship_offset_replay = false;
 int recovery_warm_up_policy = WARM_UP_NONE;
 int log_ship_warm_up_policy = WARM_UP_NONE;
@@ -55,7 +55,7 @@ bool log_ship_by_rdma = false;
 bool log_key_for_update = false;
 bool enable_chkpt = 0;
 uint64_t chkpt_interval = 50;
-bool phantom_prot = 1; // default is 0
+bool phantom_prot = 0; // default is 0
 double cycles_per_byte = 0;
 uint32_t state = kStateLoading;
 int replay_policy = kReplayPipelined;

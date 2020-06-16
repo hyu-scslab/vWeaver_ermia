@@ -8,6 +8,9 @@
 #ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
 #include <cstring>
 #endif /* HYU_ZIGZAG */
+#ifdef HYU_EVAL /* HYU_EVAL */
+#include <stdio.h>
+#endif /* HYU_EVAL */
 
 #include "dbcore/xid.h"
 #include "dbcore/sm-config.h"
@@ -96,6 +99,13 @@ class transaction {
 
 public:
   typedef TXN::txn_state txn_state;
+#ifdef HYU_EVAL /* HYU_EVAL */
+	FILE* fp;
+	bool check;
+	uint64_t update_cost;
+	uint64_t vridgy_cost;
+	uint64_t kridgy_cost;
+#endif /* HYU_EVAL */
 
 #if defined(SSN) || defined(SSI) || defined(MVOCC)
   typedef std::vector<dbtuple *> read_set_t;

@@ -231,7 +231,6 @@ int scanstackelt<P>::find_next(H &helper, key_type &ka, leafvalue_type &entry) {
   int kp;
 
   if (v_.deleted()) {
-		printf("delete?\n");
     return scan_retry;
 	}
 
@@ -406,13 +405,15 @@ keep_going:
 						state = stack[stackpos].find_next(helper, ka, entry);
 						goto chk_again;
 					}
-					assert(zigzag_o == chk_o);
-					//chk_v = ermia::oidmgr->oid_get_version_zigzag(tuple_array_, o, xc);
-					//assert(chk_v == shortcut_v);
+					ASSERT(zigzag_o == chk_o);
+					
+					obj = (ermia::Object*)shortcut_v->GetObject();
+					shortcut_ptr = obj->GetLeftShortcut();
+				} else {
+					obj = shortcut_obj;
+					shortcut_ptr = obj->GetLeftShortcut();				
 				}
 
-				obj = (ermia::Object*)shortcut_v->GetObject();
-				shortcut_ptr = obj->GetLeftShortcut();
 			}
 
       stack[stackpos].ki_ = helper.next(stack[stackpos].ki_);
@@ -493,35 +494,11 @@ int basic_table<P>::scan(H helper, Str firstkey, bool emit_firstkey, F &scanner,
     case mystack_type::scan_emit: { // surpress cross init warning about v
       ++scancount;
       ermia::dbtuple *v = NULL;
-#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
-			ermia::dbtuple *highway_v = NULL;
-#endif /* HYU_ZIGZAG */
       ermia::OID o = entry.value();
       if (ermia::config::is_backup_srv()) {
         v = ermia::oidmgr->BackupGetVersion(tuple_array_, pdest_array_, o, xc);
       } else {
-retry_rq:
-				uint64_t point_cnt;
-				uint64_t zigzag_cnt;
-#ifdef HYU_DEBUG /* HYU_DEBUG */
-				v = ermia::oidmgr->oid_get_version_debug(tuple_array_, o, xc, &point_cnt);
-#else /* HYU_DEBUG */
         v = ermia::oidmgr->oid_get_version(tuple_array_, o, xc);
-#endif /* HYU_DEBUG */
-
-#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
-#ifdef HYU_DEBUG /* HYU_DEBUG */
-				highway_v = ermia::oidmgr->oid_get_version_zigzag_debug(tuple_array_, o, xc, &zigzag_cnt);
-#else /* HYU_DEBUG */
-				highway_v = ermia::oidmgr->oid_get_version_zigzag(tuple_array_, o, xc);
-#endif /* HYU_DEBUG */
-
-				if (v != highway_v) {
-					printf("[HYU] scan fail in range scan\n");
-					goto retry_rq;
-				}
-
-#endif /* HYU_ZIGZAG */
       }
       if (v) {
         if (!scanner.visit_value(ka, v))

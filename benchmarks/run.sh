@@ -37,14 +37,14 @@ else
 fi
 
 options="$exe -verbose $1 -benchmark $bench -threads $threads -scale_factor $sf -seconds $runtime \
-  -log_data_dir $LOGDIR -log_buffer_mb=$logbuf_mb -log_segment_mb=16384 -parallel_loading"
+  -log_data_dir $LOGDIR -log_buffer_mb=$logbuf_mb -log_segment_mb=131072 -parallel_loading"
 echo $options
 if [ "$bench" == "tpcc" ]; then
   btype=${workload:4:1}
   wh_spread=0
   if [ "$btype" == "h" ]; then
     suppliers_x=${workload:5}
-    suppliers=`expr $suppliers_x \* 100`
+    suppliers=`expr $suppliers_x \* 10000`
     $options -benchmark_options "--workload-mix="40,38,0,4,4,4,10,0" --suppliers=$suppliers --warehouse-spread=$wh_spread $2"
   elif [ "$btype" == "+" ]; then
     $options -benchmark_options "--workload-mix="41,43,4,4,4,4,0,0" --warehouse-spread=$wh_spread $2"

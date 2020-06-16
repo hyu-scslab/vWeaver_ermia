@@ -44,10 +44,10 @@ class Object {
   fat_ptr clsn_;
 
 #ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
-	// highwat pointer in version chain
+	// highway pointer in version chain
 	fat_ptr highway_;
 
-	// copy of highwat version's clsn
+	// copy of highway version's clsn
 	fat_ptr highway_clsn_;
 
 	// next-key shortcut for ZIGZAG

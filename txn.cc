@@ -1,3 +1,8 @@
+#ifdef HYU_EVAL /* HYU_EVAL */
+#include <sys/times.h>
+#include <stdio.h>
+#endif /* HYU_EVAL */
+
 #include "macros.h"
 #include "txn.h"
 #include "dbcore/rcu.h"
@@ -6,6 +11,11 @@
 #include "ermia.h"
 
 namespace ermia {
+#ifdef HYU_EVAL /* HYU_EVAL */
+uint64_t update_total_cost = 0;
+uint64_t vridgy_total_cost = 0;
+uint64_t kridgy_total_cost = 0;
+#endif /* HYU_EVAL */
 
 transaction::transaction(uint64_t flags, str_arena &sa)
     : flags(flags), sa(&sa) {
@@ -25,6 +35,13 @@ transaction::transaction(uint64_t flags, str_arena &sa)
   } else {
     initialize_read_write();
   }
+#ifdef HYU_EVAL /* HYU_EVAL */
+	fp = fopen("update_cost.data", "a+");
+	update_cost = 0;
+	vridgy_cost = 0;
+	kridgy_cost = 0;
+	check = false;
+#endif /* HYU_EVAL */
 }
 
 void transaction::initialize_read_write() {
@@ -161,6 +178,10 @@ void transaction::Abort() {
     ASSERT(obj->GetAllocateEpoch() == xc->begin_epoch);
     MM::deallocate(entry);
   }
+	
+#ifdef HYU_EVAL /* HYU_EVAL */
+	fclose(fp);
+#endif /* HYU_EVAL */
 
   // Read-only tx on a safesnap won't have log
   if (log) {
@@ -1136,6 +1157,15 @@ rc_t transaction::si_commit() {
 	// And also, we can guarantee about crash because of log flush
 	volatile_write(xc->state, TXN::TXN_ALMOST_COMMIT);
 
+#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+#ifdef HYU_EVAL /* HYU_EVAL */
+	uint64_t start_time;
+	uint64_t latency = 0;
+	struct timeval kridgy_time;
+	bool chk = false;
+#endif /* HYU_EVAL */
+#endif /* HYU_ZIGZAG */
+
   // post-commit cleanup: install clsn to tuples
   // (traverse write-tuple)
   // stuff clsn in tuples in write-set
@@ -1144,12 +1174,18 @@ rc_t transaction::si_commit() {
   for (uint32_t i = 0; i < write_set.size(); ++i) {
     auto &w = write_set[i];
 #ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+#ifdef HYU_EVAL /* HYU_EVAL */
+		if (!chk) {
+			gettimeofday(&kridgy_time, NULL);
+			start_time = (uint64_t)kridgy_time.tv_usec;
+		}
+#endif /* HYU_EVAL */
 		ConcurrentMasstreeIndex* index;
 		index = (ConcurrentMasstreeIndex*)w.idx_desc->GetIndex();
 		OID oid;
 		OID next_oid;
-		OID info_oid;
-		Masstree::leaf<masstree_params>* next_leaf;
+		OID info_oid = 0;
+		Masstree::leaf<masstree_params>* next_leaf = nullptr;
 		Masstree::leaf<masstree_params>::permuter_type next_perm;
 		ConcurrentMasstree::versioned_node_t sinfo;
 		TXN::xid_context shortcut_xc;
@@ -1174,18 +1210,21 @@ rc_t transaction::si_commit() {
 			
 		} else {
 fail:
-			found = index->masstree_.search_zigzag(w.key, oid, next_oid, next_leaf,
+			found = index->masstree_.search_zigzag(w.key, oid, next_oid, &next_leaf,
 																	next_perm, next_ki, xc->begin_epoch, &sinfo);
 		
-			assert(found);
-			assert(oid == w.oid);
+			ASSERT(found);
+			ASSERT(oid == w.oid);
+			if (w.next_key_info.oid != next_oid) {
+				goto commit_ts;
+			}
 		}
 
 		/* install left shortcut to object->next */
 		if (next_ki >= 0) {
 			Object *obj = w.get_object();
 			Object *next_obj = (Object*)obj->GetNextVolatile().offset();
-			assert(next_obj != nullptr);
+			ASSERT(next_obj != nullptr);
 			memcpy(&shortcut_xc, xc, sizeof(TXN::xid_context));
 			shortcut_xc.begin = xc->end;
 			tuple_array = w.idx_desc->GetTupleArray();
@@ -1193,6 +1232,14 @@ fail:
 
 			next_obj->SetLeftShortcut(shortcut_ptr);
 		}
+#ifdef HYU_EVAL /* HYU_EVAL */
+		if (!chk) {
+			gettimeofday(&kridgy_time, NULL);
+			latency = (uint64_t)kridgy_time.tv_usec - start_time;
+			//latency = latency + ((uint64_t)kridgy_time.tv_usec - start_time);
+			chk = true;
+		}
+#endif /* HYU_EVAL */
 commit_ts:
 
 #endif /* HYU_ZIGZAG */
@@ -1213,7 +1260,23 @@ commit_ts:
 #endif
   }
 
-  // NOTE: make sure this happens after populating log block,
+#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+#ifdef HYU_EVAL /* HYU_EVAL */
+	kridgy_cost = latency;
+	if (update_cost > 0 && update_cost < 10000 &&
+			vridgy_cost < 10000 && kridgy_cost < 10000) {
+		fseek(fp, 0, SEEK_SET);
+		update_total_cost += update_cost;
+		vridgy_total_cost += vridgy_cost;
+		kridgy_total_cost += kridgy_cost;
+		fprintf(fp, "%lu, %lu, %lu\n", update_total_cost, vridgy_total_cost, kridgy_total_cost);
+		fflush(fp);
+	}
+	fclose(fp);
+#endif /* HYU_EVAL */
+#endif /* HYU_ZIGZAG */
+
+	// NOTE: make sure this happens after populating log block,
   // otherwise readers will see inconsistent data!
   // This is where (committed) tuple data are made visible to readers
   volatile_write(xc->state, TXN::TXN_CMMTD);
@@ -1235,6 +1298,15 @@ rc_t transaction::Update(IndexDescriptor *index_desc, OID oid, const varstr *k, 
 #else /* HYU_ZIGZAG */
 rc_t transaction::Update(IndexDescriptor *index_desc, OID oid, const varstr *k, varstr *v) {
 #endif /* HYU_ZIGZAG */
+
+#ifdef HYU_EVAL /* HYU_EVAL */
+	uint64_t start_time, latency;
+	struct timeval vanilla_update;
+	if (!check) {
+		gettimeofday(&vanilla_update, NULL);
+		start_time = (uint64_t)vanilla_update.tv_usec;
+	}
+#endif /* HYU_EVAL */
   oid_array *tuple_array = index_desc->GetTupleArray();
   FID tuple_fid = index_desc->GetTupleFid();
 
@@ -1405,6 +1477,16 @@ rc_t transaction::Update(IndexDescriptor *index_desc, OID oid, const varstr *k, 
                               DEFAULT_ALIGNMENT_BITS);
       }
     }
+#ifdef HYU_EVAL /* HYU_EVAL */
+		if (!check) {
+			gettimeofday(&vanilla_update, NULL);
+			latency = (uint64_t)vanilla_update.tv_usec - start_time;
+			update_cost = latency;
+			check = true;
+		}
+		//fprintf(fp, "txn_update cost: %ld, ", latency);
+		//fflush(fp);
+#endif /* HYU_EVAL */
     return rc_t{RC_TRUE};
   } else {  // somebody else acted faster than we did
     return rc_t{RC_ABORT_SI_CONFLICT};
@@ -1430,6 +1512,9 @@ OID transaction::PrepareInsert(OrderedIndex *index, varstr *value, dbtuple **out
 		Object* new_head_obj = (Object*)new_head.offset();
 		new_head_obj->rec_id = oid;
 #endif /* HYU_ZIGZAG */
+		// [HYU]
+		__sync_synchronize();
+		// [HYU] end
     oidmgr->oid_put_new(tuple_array, oid, new_head);
   } else {
     // Inserting into a secondary index - just key-OID mapping is enough
@@ -1522,6 +1607,7 @@ void transaction::FinishInsert(OrderedIndex *index, OID oid, const varstr *key, 
 		next_key_info_t nk_info;
 		memset(&nk_info, 0, sizeof(next_key_info_t));
 		nk_info.ki = -2;
+
 		add_to_write_set_zigzag(tuple_array->get(oid), key, index->GetDescriptor(), oid, nk_info);
 #else /* HYU_ZIGZAG */
     add_to_write_set(tuple_array->get(oid));

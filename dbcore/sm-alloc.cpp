@@ -90,6 +90,76 @@ void prepare_node_memory() {
   }
 }
 
+#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+void gc_version_chain(fat_ptr *oid_entry) {
+  fat_ptr ptr = *oid_entry;
+  Object *cur_obj = (Object *)ptr.offset();
+	dbtuple *candidate = nullptr;
+
+  if (!cur_obj) {
+    // Tuple is deleted, skip
+    return;
+  }
+
+  // Start from the first **committed** version, and delete after its next,
+  // because the head might be still being modified (hence its _next field)
+  // and might be gone any time (tx abort). Skip records in chkpt file as
+  // well - not even in memory.
+  auto clsn = cur_obj->GetClsn();
+  fat_ptr *prev_next = nullptr;
+  if (clsn.asi_type() == fat_ptr::ASI_CHK) {
+    return;
+  }
+  if (clsn.asi_type() != fat_ptr::ASI_LOG) {
+    DCHECK(clsn.asi_type() == fat_ptr::ASI_XID);
+    ptr = cur_obj->GetNextVolatile();
+    cur_obj = (Object *)ptr.offset();
+  }
+
+  // Now cur_obj should be the fisrt committed version, continue to the version
+  // that can be safely recycled (the version after cur_obj).
+  ptr = cur_obj->GetNextVolatile();
+  prev_next = cur_obj->GetNextVolatilePtr();
+  
+	uint64_t glsn = volatile_read(gc_lsn);
+	if (ptr.offset()) {
+		TXN::xid_context gc_xc;
+		gc_xc.begin = glsn;
+		candidate = oidmgr->oid_get_version_zigzag_from_ver(ptr, &gc_xc);
+	}
+
+	if (candidate) {
+		cur_obj = (Object*)candidate->GetObject();
+  	ptr = cur_obj->GetNextVolatile();
+  	prev_next = cur_obj->GetNextVolatilePtr();
+
+		if (ptr._ptr) {
+			volatile_write(prev_next->_ptr, 0);
+      while (ptr.offset()) {
+        cur_obj = (Object *)ptr.offset();
+        clsn = cur_obj->GetClsn();
+        ALWAYS_ASSERT(clsn.asi_type() == fat_ptr::ASI_LOG);
+        ALWAYS_ASSERT(LSN::from_ptr(clsn).offset() <= glsn);
+        fat_ptr next_ptr = cur_obj->GetNextVolatile();
+        cur_obj->SetClsn(NULL_PTR);
+        cur_obj->SetNextVolatile(NULL_PTR);
+				cur_obj->SetHighway(NULL_PTR);
+				cur_obj->SetHighwayClsn(NULL_PTR);
+				cur_obj->SetLeftShortcut(NULL_PTR);
+				cur_obj->SetLevel(1);
+				cur_obj->SetHighwayLevel(0);
+				cur_obj->rec_id = 0;
+        if (!tls_free_object_pool) {
+          tls_free_object_pool = new TlsFreeObjectPool;
+        }
+        tls_free_object_pool->Put(ptr);
+        ptr = next_ptr;
+      }
+
+		}
+	}
+}
+#else /* HYU_ZIGZAG */
 void gc_version_chain(fat_ptr *oid_entry) {
   fat_ptr ptr = *oid_entry;
   Object *cur_obj = (Object *)ptr.offset();
@@ -140,10 +210,10 @@ void gc_version_chain(fat_ptr *oid_entry) {
     // chkpt-start lsn is necessary for correctness.
     uint64_t glsn = volatile_read(gc_lsn);
 
-		// HYU
-		if (cur_obj->HYU_gc_candidate_clsn_ == glsn) {
-			break;
-		}
+		// [HYU] GC optimization
+		//if (cur_obj->HYU_gc_candidate_clsn_ == glsn) {
+		//	break;
+		//}
 
     if (LSN::from_ptr(clsn).offset() <= glsn && ptr._ptr) {
       // Fast forward to the **second** version < gc_lsn. Consider that we set
@@ -167,14 +237,7 @@ void gc_version_chain(fat_ptr *oid_entry) {
         fat_ptr next_ptr = cur_obj->GetNextVolatile();
         cur_obj->SetClsn(NULL_PTR);
         cur_obj->SetNextVolatile(NULL_PTR);
-#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
-				cur_obj->SetHighway(NULL_PTR);
-				cur_obj->SetHighwayClsn(NULL_PTR);
-				cur_obj->SetLeftShortcut(NULL_PTR);
-				cur_obj->SetLevel(1);
-				cur_obj->SetHighwayLevel(0);
-				cur_obj->rec_id = 0;
-#endif /* HYU_ZIGZAG */
+
         if (!tls_free_object_pool) {
           tls_free_object_pool = new TlsFreeObjectPool;
         }
@@ -186,6 +249,7 @@ void gc_version_chain(fat_ptr *oid_entry) {
     }
   }
 }
+#endif /* HYU_ZIGZAG */
 
 void *allocate(size_t size) {
   size = align_up(size);

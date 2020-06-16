@@ -247,10 +247,10 @@ public:
 				 next_key_info_t &next_key_info,
          ConcurrentMasstree::versioned_node_t *out_sinfo = nullptr) override {
 		OID next_oid;
-		Masstree::leaf<masstree_params>* next_leaf;
+		Masstree::leaf<masstree_params>* next_leaf = nullptr;
 		Masstree::leaf<masstree_params>::permuter_type next_perm;
 		int next_ki;
-		bool found = masstree_.search_zigzag(key, out_oid, next_oid, next_leaf,
+		bool found = masstree_.search_zigzag(key, out_oid, next_oid, &next_leaf,
 														next_perm, next_ki, xc->begin_epoch, out_sinfo);
 		if (found) {
 			next_key_info.oid = next_oid;

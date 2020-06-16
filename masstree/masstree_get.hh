@@ -51,7 +51,8 @@ forward:
     goto retry;
   } else {
 #ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
-		if (unsigned(kx.i + 1) < unsigned(perm_.size())) {
+		int new_ki = kx.i + 1;
+		if (unsigned(new_ki) < unsigned(perm_.size())) {
 			next_ = n_;
 			next_perm_ = perm_;
 			i_ = kx.i + 1;

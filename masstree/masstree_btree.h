@@ -197,7 +197,7 @@ public:
    * of setting up RCU */
 #ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
 	inline bool search_zigzag(const key_type &k, OID &o, OID &next_o,
-														Masstree::leaf<P> *next_leaf,
+														Masstree::leaf<P> **next_leaf,
 														permuter_type &next_perm, int &next_ki,
 														epoch_num e, versioned_node_t *search_info) const;
 #endif /* HYU_ZIGZAG */
@@ -514,7 +514,7 @@ template <typename P> inline size_t mbtree<P>::size() const {
 #ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
 template <typename P>
 inline bool mbtree<P>::search_zigzag(const key_type &k, OID &o, OID &next_o,
-														Masstree::leaf<P> *next_leaf,
+														Masstree::leaf<P> **next_leaf,
 														permuter_type &next_perm, int &next_ki,
 														epoch_num e, versioned_node_t *search_info) const {
   threadinfo ti(e);
@@ -523,7 +523,7 @@ inline bool mbtree<P>::search_zigzag(const key_type &k, OID &o, OID &next_o,
   if (found) {
     o = lp.value();
 		next_o = lp.lv_next_.value();
-		next_leaf = lp.next_;
+		*next_leaf = lp.next_;
 		next_perm = lp.next_perm_;
 		next_ki = lp.i_;
   }

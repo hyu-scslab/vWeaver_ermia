@@ -39,6 +39,8 @@ static constexpr ALWAYS_INLINE size_t NumCustomersPerDistrict() {
   return 3000;
 }
 
+int time_count = 1;
+long start_latency_time = 0;
 // configuration flags
 static int g_disable_xpartition_txn = 0;
 static int g_enable_separate_tree_per_partition = 0;
@@ -2143,23 +2145,44 @@ rc_t tpcc_worker::txn_query2() {
       db->NewTransaction(0, arena, txn_buf());
 	// [HYU] for breakdown
 	//FILE* lfp = fopen("latency.data", "a+");
-	sleep(5);
+	//sleep(5);
 	struct timeval start_tv, end_tv, latency_tv;
-	long start_latency_time;
-	int time_count = 1;
-	gettimeofday(&start_tv, 0);
+	//int time_count = 1;
+	//gettimeofday(&start_tv, 0);
 	gettimeofday(&latency_tv, 0);
-	start_latency_time = latency_tv.tv_sec;
+	if (start_latency_time == 0)
+		start_latency_time = latency_tv.tv_sec;
 	// end
 
-	printf("start Q2\n");
+	//printf("start Q2\n");
 
-	while (1) {
+	//while (1) {
 		util::timer t;
 
 		ermia::scoped_str_arena s_arena(arena);
-		
-		static thread_local tpcc_table_scanner r_scanner(&arena);
+	
+		// [HYU] for vicious cycle
+		static thread_local tpcc_table_scanner s_scanner(&arena);
+		s_scanner.clear();
+		const stock::key k_s_0(1, 0);
+		const stock::key k_s_1(1, std::numeric_limits<int32_t>::max());
+		TryCatch(tbl_stock(1)->Scan(txn, Encode(str(Size(k_s_0)), k_s_0),
+																	&Encode(str(Size(k_s_1)), k_s_1), s_scanner,
+																	s_arena.get()));
+
+
+		for (int i = 1; i <= 10; i++) {
+			static thread_local tpcc_table_scanner c_scanner(&arena);
+			c_scanner.clear();
+			const customer::key k_c_0(1, i, 0);
+			const customer::key k_c_1(1, i, std::numeric_limits<int32_t>::max());
+			TryCatch(tbl_customer(1)->Scan(txn, Encode(str(Size(k_c_0)), k_c_0),
+																		&Encode(str(Size(k_c_1)), k_c_1), c_scanner,
+																		s_arena.get()));
+		}
+		// [HYU] end
+
+		/*static thread_local tpcc_table_scanner r_scanner(&arena);
 		r_scanner.clear();
 		const region::key k_r_0(0);
 		const region::key k_r_1(5);
@@ -2287,36 +2310,29 @@ retry_stock:
 																Encode(str(Size(new_v_s)), new_v_s)));
 					}
 
-					// TODO. sorting by n_name, su_name, i_id
-
-					/*
-					cout << k_su.su_suppkey        << ","
-									<< v_su->su_name                << ","
-									<< v_n->n_name                  << ","
-									<< k_i.i_id                     << ","
-									<< v_i->i_name                  << std::endl;
-									*/
 				}
 			}
-		}
+		}*/
 		gettimeofday(&end_tv, 0);
 
 		if (end_tv.tv_sec - start_latency_time >= 1) {
 			start_latency_time = end_tv.tv_sec;
-			//fprintf(lfp, "%d, %lf\n", time_count, t.lap_ms());
-			//fflush(lfp);
+			FILE* lfp = fopen("latency.data", "a+");
+			fprintf(lfp, "%d, %lf\n", time_count, t.lap_ms());
+			fflush(lfp);
+			fclose(lfp);
 			//std::cerr << "[" << time_count << "] Q2 end_latency_ms: " << std::endl;
 			time_count++;
 		}
 
 		//if (end_tv.tv_sec - start_tv.tv_sec >= 50) {
-		if (time_count >= 220) {
-			printf("end Q2\n");
-			break;
-		}
-	}
+		//if (time_count >= 180) {
+			//printf("end Q2\n");
+			//break;
+		//}
+	//}
   TryCatch(db->Commit(txn));
-	printf("commit Q2\n");
+	//printf("commit Q2\n");
 	//fclose(lfp);
   return {RC_TRUE};
 }
@@ -2557,7 +2573,7 @@ class tpcc_bench_runner : public bench_runner {
   virtual std::vector<bench_worker *> make_workers() {
     util::fast_random r(23984543);
     std::vector<bench_worker *> ret;
-    if (NumWarehouses() <= ermia::config::worker_threads) {
+    if (NumWarehouses() < ermia::config::worker_threads) {
       for (size_t i = 0; i <= ermia::config::worker_threads; i++) //default <
         ret.push_back(new tpcc_worker(i, r.next(), db, open_tables, partitions,
                                       &barrier_a, &barrier_b,
@@ -2852,7 +2868,7 @@ rc_t tpcc_cmdlog_redoer::txn_new_order(uint warehouse_id) {
   const oorder_c_id_idx::key k_oo_idx(warehouse_id, districtID, customerID,
                                       k_no.no_o_id);
   TryCatch(tbl_oorder_c_id_idx(warehouse_id)
-                ->Insert(txn, Encode(str(Size(k_oo_idx)), k_oo_idx), v_oo_oid));
+               ->Insert(txn, Encode(str(Size(k_oo_idx)), k_oo_idx), v_oo_oid));
 
   for (uint ol_number = 1; ol_number <= numItems; ol_number++) {
     const uint ol_supply_w_id = supplierWarehouseIDs[ol_number - 1];

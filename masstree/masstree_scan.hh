@@ -454,6 +454,97 @@ done:
 
 #endif /* HYU_ZIGZAG */
 
+#ifdef HYU_EVAL_2 /* HYU_EVAL_2 */
+template <typename P>
+template <typename H, typename F>
+int basic_table<P>::scan_eval(H helper, Str firstkey, bool emit_firstkey, F &scanner,
+                         ermia::TXN::xid_context *xc, threadinfo &ti,
+												 int scan_flag) const {
+  typedef typename P::ikey_type ikey_type;
+  typedef typename node_type::key_type key_type;
+  typedef typename node_type::leaf_type::leafvalue_type leafvalue_type;
+  union {
+    ikey_type
+        x[(MASSTREE_MAXKEYLEN + sizeof(ikey_type) - 1) / sizeof(ikey_type)];
+    char s[MASSTREE_MAXKEYLEN];
+  } keybuf;
+  masstree_precondition(firstkey.len <= (int)sizeof(keybuf));
+  memcpy(keybuf.s, firstkey.s, firstkey.len);
+  key_type ka(keybuf.s, firstkey.len);
+
+  typedef scanstackelt<param_type> mystack_type;
+  mystack_type
+      stack[(MASSTREE_MAXKEYLEN + sizeof(ikey_type) - 1) / sizeof(ikey_type)];
+  int stackpos = 0;
+  stack[0].root_ = root_;
+  leafvalue_type entry = leafvalue_type::make_empty();
+
+  int scancount = 0;
+  int state;
+
+  while (1) {
+    state = stack[stackpos].find_initial(helper, ka, emit_firstkey, entry, ti);
+    scanner.visit_leaf(stack[stackpos], ka, ti);
+    if (state != mystack_type::scan_down)
+      break;
+    ka.shift();
+    ++stackpos;
+  }
+
+  while (1) {
+    switch (state) {
+    case mystack_type::scan_emit: { // surpress cross init warning about v
+      ++scancount;
+      ermia::dbtuple *v = NULL;
+      ermia::OID o = entry.value();
+      if (ermia::config::is_backup_srv()) {
+        v = ermia::oidmgr->BackupGetVersion(tuple_array_, pdest_array_, o, xc);
+      } else {
+				if (scan_flag == 1) // vridgy_only
+					v = ermia::oidmgr->oid_get_version_zigzag(tuple_array_, o, xc);
+				else if (scan_flag == 0) // vanilla
+        	v = ermia::oidmgr->oid_get_version(tuple_array_, o, xc);
+      }
+      if (v) {
+        if (!scanner.visit_value(ka, v))
+          goto done;
+      }
+      stack[stackpos].ki_ = helper.next(stack[stackpos].ki_);
+      state = stack[stackpos].find_next(helper, ka, entry);
+    } break;
+
+    case mystack_type::scan_find_next:
+    find_next:
+      state = stack[stackpos].find_next(helper, ka, entry);
+      if (state != mystack_type::scan_up)
+        scanner.visit_leaf(stack[stackpos], ka, ti);
+      break;
+
+    case mystack_type::scan_up:
+      do {
+        if (--stackpos < 0)
+          goto done;
+        ka.unshift();
+        stack[stackpos].ki_ = helper.next(stack[stackpos].ki_);
+      } while (unlikely(ka.empty()));
+      goto find_next;
+
+    case mystack_type::scan_down:
+      helper.shift_clear(ka);
+      ++stackpos;
+      goto retry;
+
+    case mystack_type::scan_retry:
+    retry:
+      state = stack[stackpos].find_retry(helper, ka, ti);
+      break;
+    }
+  }
+
+done:
+  return scancount;
+}
+#endif /* HYU_EVAL_2 */
 template <typename P>
 template <typename H, typename F>
 int basic_table<P>::scan(H helper, Str firstkey, bool emit_firstkey, F &scanner,
@@ -498,7 +589,11 @@ int basic_table<P>::scan(H helper, Str firstkey, bool emit_firstkey, F &scanner,
       if (ermia::config::is_backup_srv()) {
         v = ermia::oidmgr->BackupGetVersion(tuple_array_, pdest_array_, o, xc);
       } else {
+#ifdef HYU_VRIDGY_ONLY /* HYU_VRIDGY_ONLY */
+				v = ermia::oidmgr->oid_get_version_zigzag(tuple_array_, o, xc);
+#else /* HYU_VRIDGY_ONLY */
         v = ermia::oidmgr->oid_get_version(tuple_array_, o, xc);
+#endif /* HYU_VRIDGY_ONLY */
       }
       if (v) {
         if (!scanner.visit_value(ka, v))
@@ -541,6 +636,23 @@ done:
 }
 
 #ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+#ifdef HYU_EVAL_2 /* HYU_EVAL_2 */
+template <typename P>
+template <typename F>
+int basic_table<P>::scan_eval(Str firstkey, bool emit_firstkey, F &scanner,
+                         ermia::TXN::xid_context *xc, threadinfo &ti,
+												 bool is_primary_idx, int scan_flag) const {
+	// scan_flag	0: vanilla, 1: vridgy_only, 2:vweaver
+	if (scan_flag == 0 || scan_flag == 1) {
+  	return scan_eval(forward_scan_helper(), firstkey, emit_firstkey,
+								scanner, xc, ti, scan_flag);
+	} else {
+		ASSERT(scan_flag == 2);
+		return scan_zigzag(forward_scan_helper(), firstkey, emit_firstkey,
+											scanner, xc, ti, is_primary_idx);
+	}
+}
+#endif /* HYU_EVAL_2 */
 template <typename P>
 template <typename F>
 int basic_table<P>::scan(Str firstkey, bool emit_firstkey, F &scanner,

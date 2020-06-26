@@ -67,6 +67,10 @@ public:
    * Get a key of length keylen. The underlying DB does not manage
    * the memory associated with key. [rc] stores TRUE if found, FALSE otherwise.
    */
+#ifdef HYU_EVAL_2 /* HYU_EVAL_2 */
+  virtual void Get_eval(transaction *t, rc_t &rc, const varstr &key, varstr &value,
+                   OID *out_oid = nullptr) = 0;
+#endif /* HYU_EVAL_2 */
   virtual void Get(transaction *t, rc_t &rc, const varstr &key, varstr &value,
                    OID *out_oid = nullptr) = 0;
 
@@ -100,6 +104,11 @@ public:
    * Search [start_key, *end_key) if end_key is not null, otherwise
    * search [start_key, +infty)
    */
+#ifdef HYU_EVAL_2 /* HYU_EVAL_2 */
+  virtual rc_t Scan_eval(transaction *t, const varstr &start_key,
+                    const varstr *end_key, ScanCallback &callback,
+                    str_arena *arena, const int scan_flag) = 0;
+#endif /* HYU_EVAL_2 */
   virtual rc_t Scan(transaction *t, const varstr &start_key,
                     const varstr *end_key, ScanCallback &callback,
                     str_arena *arena) = 0;
@@ -214,6 +223,10 @@ public:
 
   inline void *GetTable() override { return masstree_.get_table(); }
 
+#ifdef HYU_EVAL_2 /* HYU_EVAL_2 */
+  virtual void Get_eval(transaction *t, rc_t &rc, const varstr &key, varstr &value,
+                   OID *out_oid = nullptr) override;
+#endif /* HYU_EVAL_2 */
   virtual void Get(transaction *t, rc_t &rc, const varstr &key, varstr &value,
                    OID *out_oid = nullptr) override;
 
@@ -230,6 +243,11 @@ public:
   inline rc_t Remove(transaction *t, const varstr &key) override {
     return DoTreePut(*t, &key, nullptr, false, false, nullptr);
   }
+#ifdef HYU_EVAL_2 /* HYU_EVAL_2 */
+  rc_t Scan_eval(transaction *t, const varstr &start_key, const varstr *end_key,
+            ScanCallback &callback, str_arena *arena,
+						const int scan_flag) override;
+#endif /* HYU_EVAL_2 */
   rc_t Scan(transaction *t, const varstr &start_key, const varstr *end_key,
             ScanCallback &callback, str_arena *arena) override;
   rc_t ReverseScan(transaction *t, const varstr &start_key,

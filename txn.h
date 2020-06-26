@@ -10,6 +10,7 @@
 #endif /* HYU_ZIGZAG */
 #ifdef HYU_EVAL /* HYU_EVAL */
 #include <stdio.h>
+#include <time.h>
 #endif /* HYU_EVAL */
 
 #include "dbcore/xid.h"
@@ -27,7 +28,6 @@
 using google::dense_hash_map;
 
 namespace ermia {
-
 #ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
 struct next_key_info_t {
 	OID oid;
@@ -102,9 +102,10 @@ public:
 #ifdef HYU_EVAL /* HYU_EVAL */
 	FILE* fp;
 	bool check;
-	uint64_t update_cost;
-	uint64_t vridgy_cost;
-	uint64_t kridgy_cost;
+	int64_t start_time;
+	int64_t update_cost;
+	int64_t vridgy_cost;
+	int64_t kridgy_cost;
 #endif /* HYU_EVAL */
 
 #if defined(SSN) || defined(SSI) || defined(MVOCC)
@@ -229,7 +230,12 @@ protected:
 
   inline TXN::xid_context *GetXIDContext() { return xc; }
 
+#ifdef HYU_EVAL_2 /* HYU_EVAL_2 */
+ // we need to modify begin timestamp for evaluation 2
+ public:
+#else /* HYU_EVAL_2 */
  protected:
+#endif /* HYU_EVAL_2 */
   const uint64_t flags;
   XID xid;
   TXN::xid_context *xc;

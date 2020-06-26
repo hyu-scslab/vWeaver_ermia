@@ -17,7 +17,9 @@
 #include <vector>
 
 #include <stdio.h>
-
+#ifdef HYU_EVAL /* HYU_EVAL */
+#include <time.h>
+#endif /* HYU_EVAL */
 #include "../dbcore/sm-cmd-log.h"
 
 #include "bench.h"
@@ -53,6 +55,9 @@ static uint g_microbench_rows = 10;  // this many rows
 // can't have both ratio and rows at the same time
 static int g_microbench_wr_rows = 0;  // this number of rows to write
 static int g_nr_suppliers = 10000; //default is 10000
+#ifdef HYU_EVAL_2 /* HYU_EVAL_2 */
+int g_nr_scanrange = 60000;
+#endif /* HYU_EVAL_2 */
 
 // how much % of time a worker should use a random home wh
 // 0 - always use home wh
@@ -1185,6 +1190,42 @@ class tpcc_order_loader : public bench_loader, public tpcc_worker_mixin {
   ssize_t warehouse_id;
 };
 
+#ifdef HYU_EVAL /* HYU_EVAL */
+rc_t tpcc_worker::txn_new_order() {
+  ermia::transaction *txn = db->NewTransaction(0, arena, txn_buf());
+
+	struct timespec vanilla_update;
+	if (!txn->check) {
+		clock_gettime(CLOCK_MONOTONIC, &vanilla_update);
+		txn->start_time = (int64_t)vanilla_update.tv_nsec;
+	}
+
+  ermia::scoped_str_arena s_arena(arena);
+  ermia::varstr valptr;
+
+  rc_t rc = rc_t{RC_INVALID};
+	const stock::key k_s(1, 1);
+	stock::value v_s_temp;
+
+	rc = rc_t{RC_INVALID};
+	tbl_stock(1)->Get(txn, rc, Encode(str(Size(k_s)), k_s), valptr);
+	TryVerifyRelaxed(rc);
+
+	const stock::value *v_s = Decode(valptr, v_s_temp);
+
+	stock::value v_s_new(*v_s);
+
+	TryCatch(tbl_stock(1)
+								->Put(txn, Encode(str(Size(k_s)), k_s),
+											Encode(str(Size(v_s_new)), v_s_new)));
+
+  TryCatch(db->Commit(txn));
+  if (ermia::config::command_log && !ermia::config::is_backup_srv()) {
+    ermia::CommandLog::cmd_log->Insert(1, TPCC_CLID_NEW_ORDER);
+  }
+  return {RC_TRUE};
+}
+#else /* HYU_EVAL */
 rc_t tpcc_worker::txn_new_order() {
   const uint warehouse_id = pick_wh(r);
   const uint districtID = RandomNumber(r, 1, 10);
@@ -1231,6 +1272,7 @@ rc_t tpcc_worker::txn_new_order() {
   //   max_write_set_size : 15
   //   num_txn_contexts : 9
   ermia::transaction *txn = db->NewTransaction(0, arena, txn_buf());
+
   ermia::scoped_str_arena s_arena(arena);
   const customer::key k_c(warehouse_id, districtID, customerID);
   customer::value v_c_temp;
@@ -1348,7 +1390,7 @@ rc_t tpcc_worker::txn_new_order() {
                   ->Put(txn, Encode(str(Size(k_s)), k_s),
                         Encode(str(Size(v_s_new)), v_s_new)));
 
-    const order_line::key k_ol(warehouse_id, districtID, k_no.no_o_id,
+		const order_line::key k_ol(warehouse_id, districtID, k_no.no_o_id,
                                ol_number);
     order_line::value v_ol;
     v_ol.ol_i_id = int32_t(ol_i_id);
@@ -1369,6 +1411,7 @@ rc_t tpcc_worker::txn_new_order() {
   }
   return {RC_TRUE};
 }
+#endif /* HYU_EVAL */
 
 class new_order_scan_callback : public ermia::OrderedIndex::ScanCallback {
  public:
@@ -1439,6 +1482,45 @@ class static_limit_callback : public ermia::OrderedIndex::ScanCallback {
   bool ignore_key;
 };
 
+#ifdef HYU_EVAL_2 /* HYU_EVAL_2 */
+// function for create version chain
+rc_t tpcc_worker::txn_delivery() {
+	uint64_t count = 0;
+
+	while(count < 200000) {
+		for (int i = 1; i <= 30000; i++) {
+			ermia::transaction *txn = db->NewTransaction(0, arena, txn_buf());
+
+			ermia::scoped_str_arena s_arena(arena);
+			ermia::varstr valptr;
+
+			rc_t rc = rc_t{RC_INVALID};
+			const stock::key k_s(1, i);
+			stock::value v_s_temp;
+
+			rc = rc_t{RC_INVALID};
+			tbl_stock(1)->Get(txn, rc, Encode(str(Size(k_s)), k_s), valptr);
+			TryVerifyRelaxed(rc);
+
+			const stock::value *v_s = Decode(valptr, v_s_temp);
+
+			stock::value v_s_new(*v_s);
+
+			TryCatch(tbl_stock(1)
+										->Put(txn, Encode(str(Size(k_s)), k_s),
+													Encode(str(Size(v_s_new)), v_s_new)));
+
+			TryCatch(db->Commit(txn));
+			if (ermia::config::command_log && !ermia::config::is_backup_srv()) {
+				ermia::CommandLog::cmd_log->Insert(1, TPCC_CLID_DELIVERY);
+			}
+		}
+		count++;
+	}
+	printf("finish create version chain\n");
+  return {RC_TRUE};
+}
+#else /* HYU_EVAL_2 */
 rc_t tpcc_worker::txn_delivery() {
   const uint warehouse_id = pick_wh(r);
   const uint o_carrier_id = RandomNumber(r, 1, NumDistrictsPerWarehouse());
@@ -1561,6 +1643,7 @@ rc_t tpcc_worker::txn_delivery() {
   }
   return {RC_TRUE};
 }
+#endif /* HYU_EVAL_2 */
 
 class credit_check_order_scan_callback : public ermia::OrderedIndex::ScanCallback {
  public:
@@ -1714,6 +1797,117 @@ rc_t tpcc_worker::txn_credit_check() {
   return {RC_TRUE};
 }
 
+#ifdef HYU_EVAL_2 /* HYU_EVAL_2 */
+// In this func, we do 2 type of evaluation
+// 1. latency breakdown per version chain length
+// 2. latency breakdown per scan range
+rc_t tpcc_worker::txn_payment() {
+  ermia::transaction *txn = db->NewTransaction(0, arena, txn_buf());
+
+	uint64_t timepoint[TIME_PARTITION];
+	uint64_t interval = txn->xc->begin / TIME_PARTITION;
+	for (int i = 1; i <= TIME_PARTITION; i++) {
+		timepoint[i - 1] = interval * i;
+	}
+
+	printf("start warmup\n");
+
+	// warm up
+	txn->xc->begin = timepoint[0];
+	// latency evaluation per scan range
+	ermia::scoped_str_arena s_arena(arena);
+
+	static thread_local tpcc_table_scanner s_scanner(&arena);
+	s_scanner.clear();
+	const stock::key k_s_0(1, 1);
+	const stock::key k_s_1(1, RANGE_PARTITION * RANGE_IN_STOCK);
+	ermia::varstr valptr;
+	tbl_stock(1)->Get_eval(txn, rc, Encode(str(Size(k_s_0)), k_s_0), valptr);
+	TryCatch(tbl_stock(1)->Scan_eval(txn, Encode(str(Size(k_s_0)), k_s_0),
+																&Encode(str(Size(k_s_1)), k_s_1), s_scanner,
+																s_arena.get(), SCAN_VANILLA));
+
+	printf("end warmup\n");
+	printf("start vanilla scan evaluation\n");
+
+	// 1. vanilla case
+	// latency evaluation per version chain length
+	FILE* lfp_vanilla = fopen("ermia_vanilla_latency.data", "a+");
+
+	for (int i = 0; i < TIME_PARTITION; i++) {
+		txn->xc->begin = timepoint[i];
+		// latency evaluation per scan range
+		for (int j = 1; j <= RANGE_PARTITION; j++) {
+			util::timer t;
+			ermia::scoped_str_arena s_arena(arena);
+
+			static thread_local tpcc_table_scanner s_scanner(&arena);
+			s_scanner.clear();
+			const stock::key k_s_2(1, 1);
+			const stock::key k_s_3(1, j * RANGE_IN_STOCK);
+			TryCatch(tbl_stock(1)->Scan_eval(txn, Encode(str(Size(k_s_2)), k_s_2),
+																		&Encode(str(Size(k_s_3)), k_s_3), s_scanner,
+																		s_arena.get(), SCAN_VANILLA));
+			fprintf(lfp_vanilla, "%d, %lf\n", j - 1, t.lap_ms());
+			fflush(lfp_vanilla);
+		}
+	}
+	fclose(lfp_vanilla);
+
+	printf("start vridgy scan evaluation\n");
+	// 2. vridgy_only case
+	// latency evaluation per version chain length
+	FILE* lfp_vridgy = fopen("ermia_vridgy_latency.data", "a+");
+
+	for (int i = 0; i < TIME_PARTITION; i++) {
+		txn->xc->begin = timepoint[i];
+		// latency evaluation per scan range
+		for (int j = 1; j <= RANGE_PARTITION; j++) {
+			util::timer t;
+			ermia::scoped_str_arena s_arena(arena);
+
+			static thread_local tpcc_table_scanner s_scanner(&arena);
+			s_scanner.clear();
+			const stock::key k_s_4(1, 1);
+			const stock::key k_s_5(1, j * RANGE_IN_STOCK);
+			TryCatch(tbl_stock(1)->Scan_eval(txn, Encode(str(Size(k_s_4)), k_s_4),
+																		&Encode(str(Size(k_s_5)), k_s_5), s_scanner,
+																		s_arena.get(), SCAN_VRIDGY));
+			fprintf(lfp_vridgy, "%d, %lf\n", j - 1, t.lap_ms());
+			fflush(lfp_vridgy);
+		}
+	}
+	fclose(lfp_vridgy);
+
+	printf("start vweaver scan evaluation\n");
+	// 3. vweaver case
+	// latency evaluation per version chain length
+	FILE* lfp_vweaver = fopen("ermia_vweaver_latency.data", "a+");
+
+	for (int i = 0; i < TIME_PARTITION; i++) {
+		txn->xc->begin = timepoint[i];
+		// latency evaluation per scan range
+		for (int j = 1; j <= RANGE_PARTITION; j++) {
+			util::timer t;
+			ermia::scoped_str_arena s_arena(arena);
+
+			static thread_local tpcc_table_scanner s_scanner(&arena);
+			s_scanner.clear();
+			const stock::key k_s_6(1, 1);
+			const stock::key k_s_7(1, j * RANGE_IN_STOCK);
+			TryCatch(tbl_stock(1)->Scan_eval(txn, Encode(str(Size(k_s_6)), k_s_6),
+																		&Encode(str(Size(k_s_7)), k_s_7), s_scanner,
+																		s_arena.get(), SCAN_VWEAVER));
+			fprintf(lfp_vweaver, "%d, %lf\n", j - 1, t.lap_ms());
+			fflush(lfp_vweaver);
+		}
+	}
+	fclose(lfp_vweaver);
+  TryCatch(db->Commit(txn));
+	printf("latency breakdown evaluation end\n");
+  return {RC_TRUE};
+}
+#else /* HYU_EVAL_2 */
 rc_t tpcc_worker::txn_payment() {
   const uint warehouse_id = pick_wh(r);
   const uint districtID = RandomNumber(r, 1, NumDistrictsPerWarehouse());
@@ -1871,6 +2065,7 @@ rc_t tpcc_worker::txn_payment() {
   }
   return {RC_TRUE};
 }
+#endif /* HYU_EVAL_2 */
 
 class order_line_nop_callback : public ermia::OrderedIndex::ScanCallback {
  public:
@@ -2139,28 +2334,25 @@ rc_t tpcc_worker::txn_stock_level() {
 }
 
 rc_t tpcc_worker::txn_query2() {
+	// [HYU] Transaction flag TXN_FLAG_READ_MOSTLY is same as TXN_FLAG_READ_ONLY
+	// that doesn't assign log buffer. But in txn_query2 have update sequence, so
+	// we have to start transaction with read & write
   //ermia::transaction *txn =
   //    db->NewTransaction(ermia::transaction::TXN_FLAG_READ_MOSTLY, arena, txn_buf());
   ermia::transaction *txn =
       db->NewTransaction(0, arena, txn_buf());
-	// [HYU] for breakdown
-	//FILE* lfp = fopen("latency.data", "a+");
-	//sleep(5);
-	struct timeval start_tv, end_tv, latency_tv;
-	//int time_count = 1;
-	//gettimeofday(&start_tv, 0);
+
+#if defined(HYU_MOTIVATION) 
+	struct timeval end_tv, latency_tv;
+	int time_cnt = 0;
 	gettimeofday(&latency_tv, 0);
 	if (start_latency_time == 0)
 		start_latency_time = latency_tv.tv_sec;
-	// end
 
-	//printf("start Q2\n");
-
-	//while (1) {
 		util::timer t;
 
 		ermia::scoped_str_arena s_arena(arena);
-	
+
 		// [HYU] for vicious cycle
 		static thread_local tpcc_table_scanner s_scanner(&arena);
 		s_scanner.clear();
@@ -2169,7 +2361,6 @@ rc_t tpcc_worker::txn_query2() {
 		TryCatch(tbl_stock(1)->Scan(txn, Encode(str(Size(k_s_0)), k_s_0),
 																	&Encode(str(Size(k_s_1)), k_s_1), s_scanner,
 																	s_arena.get()));
-
 
 		for (int i = 1; i <= 10; i++) {
 			static thread_local tpcc_table_scanner c_scanner(&arena);
@@ -2180,9 +2371,26 @@ rc_t tpcc_worker::txn_query2() {
 																		&Encode(str(Size(k_c_1)), k_c_1), c_scanner,
 																		s_arena.get()));
 		}
-		// [HYU] end
+		gettimeofday(&end_tv, 0);
 
-		/*static thread_local tpcc_table_scanner r_scanner(&arena);
+		if (end_tv.tv_sec - start_latency_time >= 10) {
+			time_cnt += end_tv.tv_sec - start_latency_time;
+			start_latency_time = end_tv.tv_sec;
+			FILE* lfp = fopen("latency.data", "a+");
+
+			fprintf(lfp, "%d, %lf\n", time_count, t.lap_ms());
+			fflush(lfp);
+			fclose(lfp);
+			time_count++;
+
+			//std::cerr << "[" << time_count << "] Q2 end_latency_ms: " << std::endl;
+		}
+
+#else /* HYU_MOTIVATION */
+// query2
+		ermia::scoped_str_arena s_arena(arena);
+
+		static thread_local tpcc_table_scanner r_scanner(&arena);
 		r_scanner.clear();
 		const region::key k_r_0(0);
 		const region::key k_r_1(5);
@@ -2312,28 +2520,9 @@ retry_stock:
 
 				}
 			}
-		}*/
-		gettimeofday(&end_tv, 0);
-
-		if (end_tv.tv_sec - start_latency_time >= 1) {
-			start_latency_time = end_tv.tv_sec;
-			FILE* lfp = fopen("latency.data", "a+");
-			fprintf(lfp, "%d, %lf\n", time_count, t.lap_ms());
-			fflush(lfp);
-			fclose(lfp);
-			//std::cerr << "[" << time_count << "] Q2 end_latency_ms: " << std::endl;
-			time_count++;
 		}
-
-		//if (end_tv.tv_sec - start_tv.tv_sec >= 50) {
-		//if (time_count >= 180) {
-			//printf("end Q2\n");
-			//break;
-		//}
-	//}
+#endif /* HYU_MOTIVATION */
   TryCatch(db->Commit(txn));
-	//printf("commit Q2\n");
-	//fclose(lfp);
   return {RC_TRUE};
 }
 

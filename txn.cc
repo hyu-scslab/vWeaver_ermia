@@ -1,6 +1,7 @@
 #ifdef HYU_EVAL /* HYU_EVAL */
 #include <sys/times.h>
 #include <stdio.h>
+#include <vector>
 #endif /* HYU_EVAL */
 
 #include "macros.h"
@@ -15,6 +16,14 @@ namespace ermia {
 uint64_t update_total_cost = 0;
 uint64_t vridgy_total_cost = 0;
 uint64_t kridgy_total_cost = 0;
+uint64_t total_cost = 0;
+double total_update_portion = 0;
+double total_vridgy_portion = 0;
+double total_kridgy_portion = 0;
+double z = 1.96; // confidence 95%
+std::vector<double> upd;
+std::vector<double> v;
+std::vector<double> k;
 #endif /* HYU_EVAL */
 
 transaction::transaction(uint64_t flags, str_arena &sa)
@@ -36,7 +45,8 @@ transaction::transaction(uint64_t flags, str_arena &sa)
     initialize_read_write();
   }
 #ifdef HYU_EVAL /* HYU_EVAL */
-	fp = fopen("update_cost.data", "a+");
+	fp = fopen("ermia_update_cost.data", "w+");
+	start_time = 0;
 	update_cost = 0;
 	vridgy_cost = 0;
 	kridgy_cost = 0;
@@ -1159,9 +1169,9 @@ rc_t transaction::si_commit() {
 
 #ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
 #ifdef HYU_EVAL /* HYU_EVAL */
-	uint64_t start_time;
-	uint64_t latency = 0;
-	struct timeval kridgy_time;
+	int64_t start;
+	int64_t latency = 0;
+	struct timespec kridgy_time;
 	bool chk = false;
 #endif /* HYU_EVAL */
 #endif /* HYU_ZIGZAG */
@@ -1176,8 +1186,8 @@ rc_t transaction::si_commit() {
 #ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
 #ifdef HYU_EVAL /* HYU_EVAL */
 		if (!chk) {
-			gettimeofday(&kridgy_time, NULL);
-			start_time = (uint64_t)kridgy_time.tv_usec;
+			clock_gettime(CLOCK_MONOTONIC, &kridgy_time);
+			start = (int64_t)kridgy_time.tv_nsec;
 		}
 #endif /* HYU_EVAL */
 		ConcurrentMasstreeIndex* index;
@@ -1234,8 +1244,8 @@ fail:
 		}
 #ifdef HYU_EVAL /* HYU_EVAL */
 		if (!chk) {
-			gettimeofday(&kridgy_time, NULL);
-			latency = (uint64_t)kridgy_time.tv_usec - start_time;
+			clock_gettime(CLOCK_MONOTONIC, &kridgy_time);
+			latency = (int64_t)kridgy_time.tv_nsec - start;
 			//latency = latency + ((uint64_t)kridgy_time.tv_usec - start_time);
 			chk = true;
 		}
@@ -1260,26 +1270,68 @@ commit_ts:
 #endif
   }
 
-#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
-#ifdef HYU_EVAL /* HYU_EVAL */
-	kridgy_cost = latency;
-	if (update_cost > 0 && update_cost < 10000 &&
-			vridgy_cost < 10000 && kridgy_cost < 10000) {
-		fseek(fp, 0, SEEK_SET);
-		update_total_cost += update_cost;
-		vridgy_total_cost += vridgy_cost;
-		kridgy_total_cost += kridgy_cost;
-		fprintf(fp, "%lu, %lu, %lu\n", update_total_cost, vridgy_total_cost, kridgy_total_cost);
-		fflush(fp);
-	}
-	fclose(fp);
-#endif /* HYU_EVAL */
-#endif /* HYU_ZIGZAG */
-
 	// NOTE: make sure this happens after populating log block,
   // otherwise readers will see inconsistent data!
   // This is where (committed) tuple data are made visible to readers
   volatile_write(xc->state, TXN::TXN_CMMTD);
+
+#ifdef HYU_EVAL /* HYU_EVAL */
+	struct timespec vanilla_update;
+	clock_gettime(CLOCK_MONOTONIC, &vanilla_update);
+	update_cost = (int64_t)vanilla_update.tv_nsec - start_time;
+	
+#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+	kridgy_cost = latency;
+	if (start_time > 0 && update_cost > 0) {
+		update_cost -= vridgy_cost;
+		update_total_cost += (uint64_t)update_cost;
+		vridgy_total_cost += (uint64_t)vridgy_cost;
+		kridgy_total_cost += (uint64_t)kridgy_cost;
+		uint64_t local_total_cost = update_cost + vridgy_cost + kridgy_cost;
+		total_cost = update_total_cost + vridgy_total_cost + kridgy_total_cost;
+		double upd_total_portion = (double)update_total_cost / (double)total_cost * 100;
+		double v_total_portion = (double)vridgy_total_cost / (double)total_cost * 100;
+		double k_total_portion = (double)kridgy_total_cost / (double)total_cost * 100;
+		double upd_portion = (double)update_cost / (double)local_total_cost * 100;
+		double v_portion = (double)vridgy_cost / (double)local_total_cost * 100;
+		double k_portion = (double)kridgy_cost / (double)local_total_cost * 100;
+		upd.emplace_back(upd_portion);
+		v.emplace_back(v_portion);
+		k.emplace_back(k_portion);
+		total_update_portion += upd_portion;
+		total_vridgy_portion += v_portion;
+		total_kridgy_portion += k_portion;
+		double upd_mean = total_update_portion / (double)upd.size();
+		double v_mean = total_vridgy_portion / (double)v.size();
+		double k_mean = total_kridgy_portion / (double)k.size();
+		double upd_dev = 0;
+		double v_dev = 0;
+		double k_dev = 0;
+		double upd_c, v_c, k_c;
+		// 95% confidence
+		for (int i = 0; i < upd.size(); i++) {
+			upd_dev += pow((upd[i] - upd_mean), 2.0);
+			v_dev += pow((v[i] - v_mean), 2.0);
+			k_dev += pow((k[i] - k_mean), 2.0);
+		}
+		upd_dev = sqrt(upd_dev / (double)upd.size());
+		v_dev = sqrt(v_dev / (double)v.size());
+		k_dev = sqrt(k_dev / (double)k.size());
+
+		upd_c = (double)z * (upd_dev / sqrt(upd.size()));
+		v_c = (double)z * (v_dev / sqrt(v.size()));
+		k_c = (double)z * (k_dev / sqrt(k.size()));
+
+		fprintf(fp, "2, 4, 6, %3.lf, %.3lf, %.3lf, %.3lf, %.3lf, %.3lf, %.3lf, %.3lf, %.3lf\n",
+						upd_total_portion, upd_mean, upd_c, v_total_portion, v_mean, v_c,
+						k_total_portion, k_mean, k_c);
+		fflush(fp);
+		//fclose(fp);
+	}
+#endif /* HYU_ZIGZAG */
+	fclose(fp);
+#endif /* HYU_EVAL */
+
   return rc_t{RC_TRUE};
 }
 #endif
@@ -1299,14 +1351,6 @@ rc_t transaction::Update(IndexDescriptor *index_desc, OID oid, const varstr *k, 
 rc_t transaction::Update(IndexDescriptor *index_desc, OID oid, const varstr *k, varstr *v) {
 #endif /* HYU_ZIGZAG */
 
-#ifdef HYU_EVAL /* HYU_EVAL */
-	uint64_t start_time, latency;
-	struct timeval vanilla_update;
-	if (!check) {
-		gettimeofday(&vanilla_update, NULL);
-		start_time = (uint64_t)vanilla_update.tv_usec;
-	}
-#endif /* HYU_EVAL */
   oid_array *tuple_array = index_desc->GetTupleArray();
   FID tuple_fid = index_desc->GetTupleFid();
 
@@ -1477,16 +1521,6 @@ rc_t transaction::Update(IndexDescriptor *index_desc, OID oid, const varstr *k, 
                               DEFAULT_ALIGNMENT_BITS);
       }
     }
-#ifdef HYU_EVAL /* HYU_EVAL */
-		if (!check) {
-			gettimeofday(&vanilla_update, NULL);
-			latency = (uint64_t)vanilla_update.tv_usec - start_time;
-			update_cost = latency;
-			check = true;
-		}
-		//fprintf(fp, "txn_update cost: %ld, ", latency);
-		//fflush(fp);
-#endif /* HYU_EVAL */
     return rc_t{RC_TRUE};
   } else {  // somebody else acted faster than we did
     return rc_t{RC_ABORT_SI_CONFLICT};

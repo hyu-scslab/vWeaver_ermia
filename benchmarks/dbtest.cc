@@ -23,7 +23,7 @@ DEFINE_bool(verbose, true, "Verbose mode.");
 DEFINE_string(benchmark, "tpcc", "Benchmark name: tpcc, tpce, or ycsb");
 DEFINE_string(benchmark_options, "", "Benchmark-specific opetions.");
 DEFINE_uint64(threads, 1, "Number of worker threads to run transactions.");
-DEFINE_uint64(node_memory_gb, 600, "GBs of memory to allocate per node."); //default is 12
+DEFINE_uint64(node_memory_gb, 750, "GBs of memory to allocate per node."); //default is 12
 DEFINE_bool(numa_spread, false, "Whether to pin threads in spread mode (compact if false)");
 DEFINE_string(tmpfs_dir, "/dev/shm",
               "Path to a tmpfs location. Used by log buffer.");
@@ -407,6 +407,12 @@ int main(int argc, char **argv) {
     std::cerr << "  truncate-at-bench-start : " << ermia::config::truncate_at_bench_start << std::endl;
     std::cerr << "  num-backups       : " << ermia::config::num_backups << std::endl;
     std::cerr << "  wait-for-backups  : " << ermia::config::wait_for_backups << std::endl;
+#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+		std::cerr << "  HYU ZIGZAG  " << std::endl;
+#endif /* HYU_ZIGZAG */
+#ifdef HYU_VRIDGY_ONLY /* HYU_VRIDGY_ONLY */
+		std::cerr << "  HYU VRIDGY ONLY  " << std::endl;
+#endif /* HYU_VRIDGY_ONLY */
   }
 
   ermia::MM::prepare_node_memory();

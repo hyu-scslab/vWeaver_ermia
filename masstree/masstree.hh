@@ -73,6 +73,12 @@ public:
   bool get(Str key, value_type &value, threadinfo &ti) const;
 
 #ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+#ifdef HYU_EVAL_2 /* HYU_EVAL_2 */
+  template <typename F>
+  int scan_eval(Str firstkey, bool matchfirst, F &scanner,
+           ermia::TXN::xid_context *xc, threadinfo &ti,
+					 bool is_primary_idx, int scan_flag) const;
+#endif /* HYU_EVAL_2 */
   template <typename F>
   int scan(Str firstkey, bool matchfirst, F &scanner,
            ermia::TXN::xid_context *xc, threadinfo &ti,
@@ -112,6 +118,12 @@ private:
 
 #endif /* HYU_ZIGZAG */
 
+#ifdef HYU_EVAL_2 /* HYU_EVAL_2 */
+  template <typename H, typename F>
+  int scan_eval(H helper, Str firstkey, bool matchfirst, F &scanner,
+           ermia::TXN::xid_context *xc, threadinfo &ti,
+					 int scan_flag) const;
+#endif /* HYU_EVAL_2 */
   template <typename H, typename F>
   int scan(H helper, Str firstkey, bool matchfirst, F &scanner,
            ermia::TXN::xid_context *xc, threadinfo &ti) const;

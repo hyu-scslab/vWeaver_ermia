@@ -112,7 +112,7 @@ bool bench_worker::finish_workload(rc_t ret, uint32_t workload_idx, util::timer 
 
 void bench_worker::MyWork(char *) {
   if (is_worker) {
-		//bool start_flag = false;
+		bool start_flag = false;
     workload = get_workload();
     txn_counts.resize(workload.size());
     barrier_a->count_down();
@@ -122,11 +122,27 @@ void bench_worker::MyWork(char *) {
 				//printf("hi i'm worker %d\n", get_worker_id());
 				//if (start_flag == false) {
 				//if (--Q2_count >= 0) {
-					//do_workload_function(5);
+#ifdef HYU_MOTIVATION /* HYU_MOTIVATION */
+					do_workload_function(5);
+#endif /* HYU_MOTIVATION */
 					//start_flag = true;
 				//}
-				//continue;
+				continue;
 			}
+
+#ifdef HYU_EVAL_2 /* HYU_EVAL_2 */
+			if (!start_flag) {
+				// create version chain
+				do_workload_function(2);
+				// end
+				
+				// scan
+				do_workload_function(1);
+				// end
+				start_flag = true;
+			}
+			continue;
+#endif /* HYU_EVAL_2 */
 
       double d = r.next_uniform();
       for (size_t i = 0; i < workload.size(); i++) {
@@ -367,7 +383,9 @@ void bench_runner::measure_read_view_lsn() {
 }
 
 void bench_runner::start_measurement() {
-	//FILE* fp = fopen("throughput.data", "a+");
+#ifdef HYU_MOTIVATION /* HYU_MOTIVATION */
+	FILE* fp = fopen("throughput.data", "a+");
+#endif /* HYU_MOTIVATION */
   workers = make_workers();
   ALWAYS_ASSERT(!workers.empty());
   for (std::vector<bench_worker *>::const_iterator it = workers.begin();
@@ -465,7 +483,9 @@ void bench_runner::start_measurement() {
       printf("%lu,%lu,%lu,%.2f%%\n", slept + 1, sec_commits, sec_aborts, sec_util);
     } else {
       printf("%lu,%lu,%lu\n", slept + 1, sec_commits, sec_aborts);
-      //fprintf(fp, "%lu,%lu,%lu\n", slept + 1, sec_commits, sec_aborts);
+#ifdef HYU_MOTIVATION /* HYU_MOTIVATION */
+      fprintf(fp, "%lu,%lu,%lu\n", slept + 1, sec_commits, sec_aborts);
+#endif /* HYU_MOTIVATION */
     }
     slept++;
   };
@@ -649,7 +669,9 @@ void bench_runner::start_measurement() {
          << " system aborts/s\t" << std::get<3>(c.second) / (double)elapsed_sec
          << " user aborts/s\n";
   }
-	//fclose(fp);
+#ifdef HYU_MOTIVATION /* HYU_MOTIVATION */
+	fclose(fp);
+#endif /* HYU_MOTIVATION */
   std::cout.flush();
 }
 

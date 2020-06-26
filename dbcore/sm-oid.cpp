@@ -663,7 +663,7 @@ void sm_oid_mgr::oid_put_new_if_absent(FID f, OID o, fat_ptr p) {
   }
 }
 
-#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+#if defined(HYU_ZIGZAG) || defined(HYU_VRIDGY_ONLY)
 /* bool @out 	true if success to submit highway chain */
 bool sm_oid_mgr::SubmitHighwayChain(Object* new_obj, fat_ptr old_ptr) {
 	fat_ptr next_ptr = volatile_read(old_ptr);
@@ -674,6 +674,8 @@ bool sm_oid_mgr::SubmitHighwayChain(Object* new_obj, fat_ptr old_ptr) {
 	uint64_t watermark = volatile_read(MM::gc_lsn);
 	fat_ptr clsn;
 
+	// If coin toss result is tail, get lowest level.
+	// v_ridgy is same as next
 	if (my_level == 1) {
 		clsn = next->GetClsn();
 
@@ -689,6 +691,9 @@ bool sm_oid_mgr::SubmitHighwayChain(Object* new_obj, fat_ptr old_ptr) {
 		return true;
 	}
 
+	// If coin toss result is head, go stacking. We have to find v_ridgy through
+	// traversing next's v_ridgy. If a version's level is same or bigger than my
+	// level, connecting v_ridgy.
 	while (1) {
 		hw_level = (uint64_t)next->GetHighwayLevel();
 
@@ -714,7 +719,6 @@ bool sm_oid_mgr::SubmitHighwayChain(Object* new_obj, fat_ptr old_ptr) {
 			new_object->SetHighwayLevel(highway->GetLevel());
 			//new_object->SetHighwayClsn(next->GetHighwayClsn());
 			//new_object->SetHighwayLevel(next->GetHighwayLevel());
-
 			return true;
 		} else {
 			next_ptr = next->GetHighway();
@@ -736,7 +740,7 @@ bool sm_oid_mgr::SubmitHighwayChain(Object* new_obj, fat_ptr old_ptr) {
 	}
 	return false;
 }
-#endif /* HYU_ZIGZAG */
+#endif /* HYU_ZIGZAG || HYU_VRIDGY_ONLY */
 
 fat_ptr sm_oid_mgr::PrimaryTupleUpdate(FID f, OID o, const varstr *value,
                                        TXN::xid_context *updater_xc,
@@ -846,14 +850,14 @@ install:
 	// HYU_GC end
   if (overwrite) {
     new_object->SetNextPersistent(old_desc->GetNextPersistent());
-    new_object->SetNextVolatile(old_desc->GetNextVolatile());
-#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+    new_object->SetNextVolatile(old_desc->GetNextVolatile());		
+#if defined(HYU_ZIGZAG) || defined(HYU_VRIDGY_ONLY)
 		new_object->SetHighway(old_desc->GetHighway());
 		new_object->SetHighwayClsn(old_desc->GetHighwayClsn());
 		new_object->SetLevel(old_desc->GetLevel());
 		new_object->SetHighwayLevel(old_desc->GetHighwayLevel());
 		new_object->rec_id = old_desc->rec_id;
-#endif /* HYU_ZIGZAG */
+#endif /* HYU_ZIGZAG || HYU_VRIDGY_ONLY */
     // I already claimed it, no need to use cas then
     volatile_write(ptr->_ptr, new_obj_ptr->_ptr);
     __sync_synchronize();
@@ -866,13 +870,13 @@ install:
     new_object->SetNextPersistent(pa);
     new_object->SetNextVolatile(head);
 
-#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+#if defined(HYU_ZIGZAG) || defined(HYU_VRIDGY_ONLY)
 #ifdef HYU_EVAL /* HYU_EVAL */
-		uint64_t start_time, latency;
-		struct timeval vridgy_time;
+		int64_t start_time, latency;
+		struct timespec vridgy_time;
 		if (!updater_xc->xct->check) {
-			gettimeofday(&vridgy_time, NULL);
-			start_time = (uint64_t)vridgy_time.tv_usec;
+			clock_gettime(CLOCK_MONOTONIC, &vridgy_time);
+			start_time = (int64_t)vridgy_time.tv_nsec;
 		}
 #endif /* HYU_EVAL */
 			// In this case, we have to set highway shortcut
@@ -895,19 +899,18 @@ install:
 			bool submit = SubmitHighwayChain(new_object, head);
 			new_object->rec_id = o;
 			__sync_synchronize();
-#endif /* HYU_ZIGZAG */
+#endif /* HYU_ZIGZAG || HYU_VRIDGY_ONLY */
 
     if (__sync_bool_compare_and_swap(&ptr->_ptr, head._ptr,
                                      new_obj_ptr->_ptr)) {
 #ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
 #ifdef HYU_EVAL /* HYU_EVAL */
 			if (!updater_xc->xct->check) {
-				gettimeofday(&vridgy_time, NULL);
-				latency = (uint64_t)vridgy_time.tv_usec - start_time;
+				clock_gettime(CLOCK_MONOTONIC, &vridgy_time);
+				latency = (int64_t)vridgy_time.tv_nsec - start_time;
 				updater_xc->xct->vridgy_cost = latency;
+				updater_xc->xct->check = true;
 			}
-			//fprintf(updater_xc->xct->fp, "vridgy cost: %ld, ", latency);
-			//fflush(updater_xc->xct->fp);
 #endif /* HYU_EVAL */
 #endif /* HYU_ZIGZAG */
       // Succeeded installing a new version, now only I can modify the
@@ -1179,6 +1182,71 @@ start_over:
 
 #endif /* HYU_DEBUG */
 
+#ifdef HYU_EVAL_2 /* HYU_EVAL_2 */
+// For tuple arrays only, i.e., entries are guaranteed to point to Objects.
+dbtuple *sm_oid_mgr::oid_get_version_eval(oid_array *oa, OID o,
+                                    TXN::xid_context *visitor_xc) {
+  fat_ptr *entry = oa->get(o);
+start_over:
+  fat_ptr ptr = volatile_read(*entry);
+  ASSERT(ptr.asi_type() == 0);
+  Object *prev_obj = nullptr;
+	uint64_t prev_level = 0;
+	FILE* fp = fopen("chain_stack.data", "w+");
+  while (ptr.offset()) {
+    Object *cur_obj = nullptr;
+		uint64_t cur_level = 0;
+    // Must read next_ before reading cur_obj->_clsn:
+    // the version we're currently reading (ie cur_obj) might be unlinked
+    // and thus recycled by the memory allocator at any time if it's not
+    // a committed version. If so, cur_obj->_next will be pointing to some
+    // other object in the allocator's free object pool - we'll probably
+    // end up at la-la land if we followed this _next pointer value...
+    // Here we employ some flavor of OCC to solve this problem:
+    // the aborting transaction that will unlink cur_obj will update
+    // cur_obj->_clsn to NULL_PTR, then deallocate(). Before reading
+    // cur_obj->_clsn, we (as the visitor), first dereference pp to get
+    // a stable value that "should" contain the right address of the next
+    // version. We then read cur_obj->_clsn to verify: if it's NULL_PTR
+    // that means we might have read a wrong _next value that's actually
+    // pointing to some irrelevant object in the allocator's memory pool,
+    // hence must start over from the beginning of the version chain.
+    fat_ptr tentative_next = NULL_PTR;
+    // If this is a backup server, then must see persistent_next to find out
+    // the **real** overwritten version.
+    if (config::is_backup_srv() && !config::command_log) {
+      oid_get_version_backup(ptr, tentative_next, prev_obj, cur_obj, visitor_xc);
+    } else {
+      ASSERT(ptr.asi_type() == 0);
+      cur_obj = (Object *)ptr.offset();
+			cur_level = cur_obj->GetLevel();
+      tentative_next = cur_obj->GetNextVolatile();
+      ASSERT(tentative_next.asi_type() == 0);
+    }
+
+    bool retry = false;
+    bool visible = TestVisibility(cur_obj, visitor_xc, retry);
+    if (retry) {
+      goto start_over;
+    }
+    if (visible) {
+			fclose(fp);
+      return cur_obj->GetPinnedTuple();
+    }
+		if (prev_level == 1) {
+			fprintf(fp, "%lu\n", cur_level);
+			fflush(fp);
+		}
+    ptr = tentative_next;
+    prev_obj = cur_obj;
+		prev_level = cur_level;
+  }
+  
+	fclose(fp);
+	return nullptr;  // No Visible records
+}
+#endif /* HYU_EVAL_2 */
+
 // For tuple arrays only, i.e., entries are guaranteed to point to Objects.
 dbtuple *sm_oid_mgr::oid_get_version(oid_array *oa, OID o,
                                     TXN::xid_context *visitor_xc) {
@@ -1231,7 +1299,7 @@ start_over:
 	return nullptr;  // No Visible records
 }
 
-#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+#if defined(HYU_ZIGZAG) || defined(HYU_VRIDGY_ONLY)
 #ifdef HYU_DEBUG /* HYU_DEBUG */
 // For tuple arrays only, i.e., entries are guaranteed to point to Objects.
 dbtuple *sm_oid_mgr::oid_get_version_zigzag_debug(oid_array *oa, OID o,

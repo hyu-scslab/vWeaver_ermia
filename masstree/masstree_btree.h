@@ -276,6 +276,11 @@ public:
    *   B) no concurrent mutation of string
    * note that string contents upon return are arbitrary
    */
+#ifdef HYU_EVAL_2 /* HYU_EVAL_2 */
+  void search_range_call_eval(const key_type &lower, const key_type *upper,
+                         low_level_search_range_callback &callback,
+                         TXN::xid_context *xc, int scan_flag) const;
+#endif /* HYU_EVAL_2 */
   void search_range_call(const key_type &lower, const key_type *upper,
                          low_level_search_range_callback &callback,
                          TXN::xid_context *xc) const;
@@ -727,6 +732,21 @@ public:
 private:
   F &callback_;
 };
+
+template <typename P>
+inline void
+#ifdef HYU_EVAL_2 /* HYU_EVAL_2 */
+mbtree<P>::search_range_call_eval(const key_type &lower, const key_type *upper,
+                             low_level_search_range_callback &callback,
+                             TXN::xid_context *xc, int scan_flag) const {
+  low_level_search_range_scanner<false> scanner(this, upper, callback);
+	threadinfo ti(xc->begin_epoch);
+	
+	bool pr = is_primary_idx_;
+  table_.scan_eval(lcdf::Str(lower.data(), lower.size()), true,
+							scanner, xc, ti, pr, scan_flag);
+}
+#endif /* HYU_EVAL_2 */
 
 template <typename P>
 inline void

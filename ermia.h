@@ -69,7 +69,7 @@ public:
    */
 #ifdef HYU_EVAL_2 /* HYU_EVAL_2 */
   virtual void Get_eval(transaction *t, rc_t &rc, const varstr &key, varstr &value,
-                   OID *out_oid = nullptr) = 0;
+                   int flag, OID *out_oid = nullptr) = 0;
 #endif /* HYU_EVAL_2 */
   virtual void Get(transaction *t, rc_t &rc, const varstr &key, varstr &value,
                    OID *out_oid = nullptr) = 0;
@@ -225,7 +225,7 @@ public:
 
 #ifdef HYU_EVAL_2 /* HYU_EVAL_2 */
   virtual void Get_eval(transaction *t, rc_t &rc, const varstr &key, varstr &value,
-                   OID *out_oid = nullptr) override;
+                   int flag, OID *out_oid = nullptr) override;
 #endif /* HYU_EVAL_2 */
   virtual void Get(transaction *t, rc_t &rc, const varstr &key, varstr &value,
                    OID *out_oid = nullptr) override;

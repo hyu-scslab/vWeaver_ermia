@@ -90,7 +90,7 @@ void prepare_node_memory() {
   }
 }
 
-#if defined(HYU_ZIGZAG) || defined(HYU_VRIDGY_ONLY)
+#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
 void gc_version_chain(fat_ptr *oid_entry) {
   fat_ptr ptr = *oid_entry;
   Object *cur_obj = (Object *)ptr.offset();
@@ -159,7 +159,7 @@ void gc_version_chain(fat_ptr *oid_entry) {
 		}
 	}
 }
-#else /* HYU_ZIGZAG || HYU_VRIDGY_ONLY*/
+#else /* HYU_ZIGZAG */
 void gc_version_chain(fat_ptr *oid_entry) {
   fat_ptr ptr = *oid_entry;
   Object *cur_obj = (Object *)ptr.offset();
@@ -249,7 +249,7 @@ void gc_version_chain(fat_ptr *oid_entry) {
     }
   }
 }
-#endif /* HYU_ZIGZAG || HYU_VRIDGY_ONLY */
+#endif /* HYU_ZIGZAG */
 
 void *allocate(size_t size) {
   size = align_up(size);
@@ -308,14 +308,14 @@ void deallocate(fat_ptr p) {
   Object *obj = (Object *)p.offset();
   obj->SetNextVolatile(NULL_PTR);
   obj->SetClsn(NULL_PTR);
-#if defined(HYU_ZIGZAG) || defined(HYU_VRIDGY_ONLY)
+#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
 	obj->SetHighway(NULL_PTR);
 	obj->SetHighwayClsn(NULL_PTR);
 	obj->SetLeftShortcut(NULL_PTR);
 	obj->SetLevel(1);
 	obj->SetHighwayLevel(0);
 	obj->rec_id = 0;
-#endif /* HYU_ZIGZAG || HYU_VRIDGY_ONLY */
+#endif /* HYU_ZIGZAG */
   if (!tls_free_object_pool) {
     tls_free_object_pool = new TlsFreeObjectPool;
   }
@@ -389,7 +389,9 @@ void epoch_reclaimed(void *cookie, void *epoch_cookie) {
     volatile_write(safesnap_lsn, std::max(safesnap_lsn, new_safesnap_lsn));
   }
   if (e >= 2) {
+#ifndef HYU_EVAL_2 /* HYU_EVAL_2 */
     volatile_write(gc_lsn, epoch_reclaim_lsn[(e - 2) % 3]);
+#endif /* HYU_EVAL_2 */
     volatile_write(gc_epoch, e - 2);
     epoch_reclaim_lsn[(e - 2) % 3] = 0;
   }

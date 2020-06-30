@@ -101,7 +101,7 @@ DEFINE_uint64(command_log_buffer_mb, 16, "Size of command log buffer.");
 DEFINE_bool(log_ship_offset_replay, false, "Whether to parallel offset based replay.");
 
 // Options specific to backups
-DEFINE_bool(nvram_log_buffer, true, "Whether to use NVRAM-based log buffer.");
+DEFINE_bool(nvram_log_buffer, false, "Whether to use NVRAM-based log buffer."); // default true
 DEFINE_string(
     nvram_delay_type, "none",
     "How should NVRAM be emulated?"
@@ -410,9 +410,6 @@ int main(int argc, char **argv) {
 #ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
 		std::cerr << "  HYU ZIGZAG  " << std::endl;
 #endif /* HYU_ZIGZAG */
-#ifdef HYU_VRIDGY_ONLY /* HYU_VRIDGY_ONLY */
-		std::cerr << "  HYU VRIDGY ONLY  " << std::endl;
-#endif /* HYU_VRIDGY_ONLY */
   }
 
   ermia::MM::prepare_node_memory();

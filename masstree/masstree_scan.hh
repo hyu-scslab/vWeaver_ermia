@@ -589,11 +589,7 @@ int basic_table<P>::scan(H helper, Str firstkey, bool emit_firstkey, F &scanner,
       if (ermia::config::is_backup_srv()) {
         v = ermia::oidmgr->BackupGetVersion(tuple_array_, pdest_array_, o, xc);
       } else {
-#ifdef HYU_VRIDGY_ONLY /* HYU_VRIDGY_ONLY */
-				v = ermia::oidmgr->oid_get_version_zigzag(tuple_array_, o, xc);
-#else /* HYU_VRIDGY_ONLY */
         v = ermia::oidmgr->oid_get_version(tuple_array_, o, xc);
-#endif /* HYU_VRIDGY_ONLY */
       }
       if (v) {
         if (!scanner.visit_value(ka, v))

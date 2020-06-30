@@ -119,13 +119,13 @@ fat_ptr Object::Create(const varstr *tuple_value, bool do_write,
   // In case we got it from the tls reuse pool
   ASSERT(obj->GetAllocateEpoch() <= epoch - 4);
   obj->SetAllocateEpoch(epoch);
-#if defined(HYU_ZIGZAG) || defined(HYU_VRIDGY_ONLY)
+#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
 	obj->SetHighway(NULL_PTR);
 	obj->SetHighwayClsn(NULL_PTR);
 	obj->SetLeftShortcut(NULL_PTR);
 	obj->SetLevel(1);
 	obj->SetHighwayLevel(0);
-#endif /* HYU_ZIGZAG || HYU_VRIDGY_ONLY */
+#endif /* HYU_ZIGZAG */
 	
 	// Tuple setup
   dbtuple *tuple = (dbtuple *)obj->GetPayload();

@@ -43,7 +43,7 @@ class Object {
   // commit. size_code refers to the whole object including header
   fat_ptr clsn_;
 
-#if defined(HYU_ZIGZAG) || defined(HYU_VRIDGY_ONLY)
+#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
 	// highway pointer in version chain
 	fat_ptr highway_;
 
@@ -58,7 +58,7 @@ class Object {
 
 	// level of highway version
 	uint8_t highway_lv_;
-#endif /* HYU_ZIGZAG || HYU_VRIDGY_ONLY */
+#endif /* HYU_ZIGZAG */
 
 
  public:
@@ -72,13 +72,13 @@ class Object {
         next_pdest_(NULL_PTR),
         next_volatile_(NULL_PTR),
         clsn_(NULL_PTR),
-#if defined(HYU_ZIGZAG) || defined(HYU_VRIDGY_ONLY)
+#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
 				highway_(NULL_PTR),
 				highway_clsn_(NULL_PTR),
 				left_shortcut_(NULL_PTR),
 				lv_(1),
 				highway_lv_(0),
-#endif /* HYU_ZIGZAG || HYU_VRIDGY_ONLY */
+#endif /* HYU_ZIGZAG */
 				HYU_gc_candidate_clsn_(0) {}
 
   Object(fat_ptr pdest, fat_ptr next, epoch_num e, bool in_memory)
@@ -88,13 +88,13 @@ class Object {
         next_pdest_(next),
         next_volatile_(NULL_PTR),
         clsn_(NULL_PTR),
-#if defined(HYU_ZIGZAG) || defined(HYU_VRIDGY_ONLY)
+#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
 				highway_(NULL_PTR),
 				highway_clsn_(NULL_PTR),
 				left_shortcut_(NULL_PTR),
 				lv_(1),
 				highway_lv_(0),
-#endif /* HYU_ZIGZAG || HYU_VRIDGY_ONLY */
+#endif /* HYU_ZIGZAG */
 				HYU_gc_candidate_clsn_(0) {}
 
   inline bool IsDeleted() { return status_ == kStatusDeleted; }
@@ -126,13 +126,13 @@ class Object {
     }
     return (dbtuple*)GetPayload();
   }
-#if defined(HYU_ZIGZAG) || defined(HYU_VRIDGY_ONLY)
-	inline int TossCoin(uint64_t seed) {
-		seed ^= seed >> 12;
-		seed ^= seed << 25;
-		seed ^= seed >> 27;
+#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+	inline int TossCoin(uint64_t *seed) {
+		*seed ^= *seed >> 12;
+		*seed ^= *seed << 25;
+		*seed ^= *seed >> 27;
 
-		return (seed * 2685821657736338717ULL) % 2;
+		return (*seed * 2685821657736338717ULL) % 2;
 	}
 	inline uint8_t GetLevel() { return lv_; }
 	inline void SetLevel(uint8_t level) { lv_ = level; }
@@ -144,15 +144,15 @@ class Object {
 	inline void SetHighwayClsn(fat_ptr clsn) { volatile_write(highway_clsn_, clsn); }
 	inline void SetHighway(fat_ptr highway) { volatile_write(highway_, highway); }
 	inline void SetLeftShortcut(fat_ptr left) { volatile_write(left_shortcut_, left); }
-#endif /* HYU_ZIGZAG || HYU_VRIDGY_ONLY */
+#endif /* HYU_ZIGZAG */
   fat_ptr GenerateClsnPtr(uint64_t clsn);
   void Pin(
       bool load_from_logbuf = false);  // Make sure the payload is in memory
 	
 	// HYU_GC
 	uint64_t HYU_gc_candidate_clsn_;
-#if defined(HYU_ZIGZAG) || defined(HYU_VRIDGY_ONLY)
+#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
 	OID rec_id;
-#endif /* HYU_ZIGZAG || HYU_VRIDGY_ONLY */
+#endif /* HYU_ZIGZAG */
 };
 }  // namespace ermia

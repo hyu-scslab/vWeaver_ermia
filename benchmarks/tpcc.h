@@ -8,9 +8,9 @@
 #define SCAN_VANILLA 0
 #define SCAN_VRIDGY 1
 #define SCAN_VWEAVER 2
-#define TIME_PARTITION (5)
-#define RANGE_PARTITION (5)
-#define RANGE_IN_STOCK (2000)
+#define TIME_PARTITION (10)
+#define RANGE_PARTITION (10)
+#define RANGE_IN_STOCK (1000)
 #endif /* HYU_EVAL_2 */
 
 // These correspond to the their index in the workload desc vector

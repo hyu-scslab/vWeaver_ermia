@@ -181,7 +181,7 @@ std::map<std::string, uint64_t> ConcurrentMasstreeIndex::Clear() {
 
 #ifdef HYU_EVAL_2 /* HYU_EVAL_2 */
 void ConcurrentMasstreeIndex::Get_eval(transaction *t, rc_t &rc, const varstr &key,
-                                  varstr &value, OID *out_oid) {
+                                  varstr &value, int flag, OID *out_oid) {
   OID oid = 0;
   rc = {RC_INVALID};
   ConcurrentMasstree::versioned_node_t sinfo;
@@ -202,8 +202,13 @@ void ConcurrentMasstreeIndex::Get_eval(transaction *t, rc_t &rc, const varstr &k
             descriptor_->GetTupleArray(),
             descriptor_->GetPersistentAddressArray(), oid, t->xc);
       } else {
-				tuple =
-						oidmgr->oid_get_version_eval(descriptor_->GetTupleArray(), oid, t->xc);
+				if (flag == 0) { //vanilla
+					tuple =
+							oidmgr->oid_get_version_eval_stack(descriptor_->GetTupleArray(), oid, t->xc);
+				} else {
+					tuple = 
+							oidmgr->oid_get_version_eval(descriptor_->GetTupleArray(), oid, t->xc);
+				}
       }
       if (!tuple) {
         found = false;

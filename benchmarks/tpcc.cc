@@ -56,7 +56,7 @@ static uint g_microbench_rows = 10;  // this many rows
 static int g_microbench_wr_rows = 0;  // this number of rows to write
 static int g_nr_suppliers = 10000; //default is 10000
 #ifdef HYU_EVAL_2 /* HYU_EVAL_2 */
-int g_nr_scanrange = 60000;
+uint64_t first_begin = 0;
 #endif /* HYU_EVAL_2 */
 
 // how much % of time a worker should use a random home wh
@@ -1483,32 +1483,162 @@ class static_limit_callback : public ermia::OrderedIndex::ScanCallback {
 };
 
 #ifdef HYU_EVAL_2 /* HYU_EVAL_2 */
+static inline double to_double(uint64_t x) {
+	const union { uint64_t i; double d; } u = { .i = UINT64_C(0x3FF) << 52 | x >> 12 };
+	return u.d - 1.0;
+}
+
+static inline uint64_t xorshift64s(int64_t *t)
+{
+   *t ^= *t >> 12;
+   *t ^= *t << 25;
+   *t ^= *t >> 27;
+
+   return *t * 2685821657736338717ull;
+}
+
+uint64_t uniform(double alpha, uint64_t n, int64_t *seed)
+{
+	/*uint64_t ret;
+	random_device rd;
+	mt19937_64 gen(rd());
+	uniform_int_distribution<int> distribution(0, n);
+
+	ret = distribution(gen);
+
+	return ret;*/
+	return xorshift64s(seed) % n;
+}
+
+/* We use zipf function from csee.usf.edu/~kchriste/tools/genzipf.c */
+uint64_t zipfian(double alpha, uint64_t n)
+{
+  static int64_t seed = 1;
+	static int first = 1;      // Static first time flag
+  static double c = 0;          // Normalization constant
+  static double *sum_probs;     // Pre-calculated sum of probabilities
+  double z;                     // Uniform random number (0 < z < 1)
+  uint64_t zipf_value;               // Computed exponential value to be returned
+  int    i;                     // Loop counter
+  int low, high, mid;           // Binary-search bounds
+	/*random_device rd;
+	mt19937_64 gen(rd());
+	uniform_real_distribution<double> distribution(0.0, 1.0);*/
+
+  // Compute normalization constant on first call only
+  if (first == 1)
+  {
+    for (i=1; i<=n; i++)
+      c = c + (1.0 / pow((double) i, alpha));
+    c = 1.0 / c;
+
+    sum_probs = (double*)malloc((n+1)*sizeof(double));
+    sum_probs[0] = 0;
+    for (i=1; i<=n; i++) {
+      sum_probs[i] = sum_probs[i-1] + c / pow((double) i, alpha);
+    }
+    first = 0;
+  }
+
+  // Pull a uniform random number (0 < z < 1)
+  do
+  {
+		z = to_double(xorshift64s(&seed));
+		//z = distribution(gen);
+  }
+  while ((z == 0) || (z == 1));
+
+  // Map z to the value
+  low = 1, high = n, mid;
+  do {
+    mid = floor((low+high)/2);
+    if (sum_probs[mid] >= z && sum_probs[mid-1] < z) {
+      zipf_value = mid;
+      break;
+    } else if (sum_probs[mid] >= z) {
+      high = mid-1;
+    } else {
+      low = mid+1;
+    }
+  } while (low <= high);
+
+  // Assert that zipf_value is between 1 and N
+	if (zipf_value < 1) {
+		
+  	assert((zipf_value >=1) && (zipf_value <= n));
+	} else if (zipf_value > n) {
+		zipf_value %= n;
+	}
+
+  return(zipf_value);
+}
+
 // function for create version chain
 rc_t tpcc_worker::txn_delivery() {
 	uint64_t count = 0;
+	bool first = false;
 
 	while(count < 200000) {
 		for (int i = 1; i <= 30000; i++) {
+		//for (int i = 1; i <= 1; i++) {
 			ermia::transaction *txn = db->NewTransaction(0, arena, txn_buf());
+			if (!first) {
+				first_begin = txn->xc->begin;
+				first = true;
+			}
 
 			ermia::scoped_str_arena s_arena(arena);
 			ermia::varstr valptr;
 
 			rc_t rc = rc_t{RC_INVALID};
-			const stock::key k_s(1, i);
-			stock::value v_s_temp;
+			if (i >= 1 && i <= 10000) {
+				const stock::key k_s(1, i);
+				stock::value v_s_temp;
 
-			rc = rc_t{RC_INVALID};
-			tbl_stock(1)->Get(txn, rc, Encode(str(Size(k_s)), k_s), valptr);
-			TryVerifyRelaxed(rc);
+				rc = rc_t{RC_INVALID};
+				tbl_stock(1)->Get(txn, rc, Encode(str(Size(k_s)), k_s), valptr);
+				TryVerifyRelaxed(rc);
 
-			const stock::value *v_s = Decode(valptr, v_s_temp);
+				const stock::value *v_s = Decode(valptr, v_s_temp);
 
-			stock::value v_s_new(*v_s);
+				stock::value v_s_new(*v_s);
 
-			TryCatch(tbl_stock(1)
-										->Put(txn, Encode(str(Size(k_s)), k_s),
-													Encode(str(Size(v_s_new)), v_s_new)));
+				TryCatch(tbl_stock(1)
+											->Put(txn, Encode(str(Size(k_s)), k_s),
+														Encode(str(Size(v_s_new)), v_s_new)));
+			} else if (i >= 10001 && i <= 20000) {
+				uint64_t zipf_val = zipfian(0.4, 10000) + 10000;
+				const stock::key k_s(1, zipf_val);
+				stock::value v_s_temp;
+
+				rc = rc_t{RC_INVALID};
+				tbl_stock(1)->Get(txn, rc, Encode(str(Size(k_s)), k_s), valptr);
+				TryVerifyRelaxed(rc);
+
+				const stock::value *v_s = Decode(valptr, v_s_temp);
+
+				stock::value v_s_new(*v_s);
+
+				TryCatch(tbl_stock(1)
+											->Put(txn, Encode(str(Size(k_s)), k_s),
+														Encode(str(Size(v_s_new)), v_s_new)));
+			} else if (i >= 20001 && i <= 30000) {
+				uint64_t zipf_val = zipfian(1.4, 10000) + 20000;
+				const stock::key k_s(1, zipf_val);
+				stock::value v_s_temp;
+
+				rc = rc_t{RC_INVALID};
+				tbl_stock(1)->Get(txn, rc, Encode(str(Size(k_s)), k_s), valptr);
+				TryVerifyRelaxed(rc);
+
+				const stock::value *v_s = Decode(valptr, v_s_temp);
+
+				stock::value v_s_new(*v_s);
+
+				TryCatch(tbl_stock(1)
+											->Put(txn, Encode(str(Size(k_s)), k_s),
+														Encode(str(Size(v_s_new)), v_s_new)));
+			}
 
 			TryCatch(db->Commit(txn));
 			if (ermia::config::command_log && !ermia::config::is_backup_srv()) {
@@ -1804,10 +1934,21 @@ rc_t tpcc_worker::txn_credit_check() {
 rc_t tpcc_worker::txn_payment() {
   ermia::transaction *txn = db->NewTransaction(0, arena, txn_buf());
 
+	double vanilla_uniform[TIME_PARTITION][RANGE_PARTITION];
+	double vanilla_mid_skew[TIME_PARTITION][RANGE_PARTITION];
+	double vanilla_high_skew[TIME_PARTITION][RANGE_PARTITION];
+	double vridgy_uniform[TIME_PARTITION][RANGE_PARTITION];
+	double vridgy_mid_skew[TIME_PARTITION][RANGE_PARTITION];
+	double vridgy_high_skew[TIME_PARTITION][RANGE_PARTITION];
+	double vweaver_uniform[TIME_PARTITION][RANGE_PARTITION];
+	double vweaver_mid_skew[TIME_PARTITION][RANGE_PARTITION];
+	double vweaver_high_skew[TIME_PARTITION][RANGE_PARTITION];
+	
 	uint64_t timepoint[TIME_PARTITION];
-	uint64_t interval = txn->xc->begin / TIME_PARTITION;
+	uint64_t interval = (txn->xc->begin - first_begin) / TIME_PARTITION;
 	for (int i = 1; i <= TIME_PARTITION; i++) {
-		timepoint[i - 1] = interval * i;
+		timepoint[i - 1] = interval * i + first_begin;
+		printf("timepoint %d: %lu\n", i, timepoint[i - 1]);
 	}
 
 	printf("start warmup\n");
@@ -1815,94 +1956,351 @@ rc_t tpcc_worker::txn_payment() {
 	// warm up
 	txn->xc->begin = timepoint[0];
 	// latency evaluation per scan range
-	ermia::scoped_str_arena s_arena(arena);
+	{
+	ermia::scoped_str_arena s_arena_0(arena);
 
-	static thread_local tpcc_table_scanner s_scanner(&arena);
-	s_scanner.clear();
+	static thread_local tpcc_table_scanner s_scanner_0(&arena);
+	s_scanner_0.clear();
 	const stock::key k_s_0(1, 1);
 	const stock::key k_s_1(1, RANGE_PARTITION * RANGE_IN_STOCK);
 	ermia::varstr valptr;
-	tbl_stock(1)->Get_eval(txn, rc, Encode(str(Size(k_s_0)), k_s_0), valptr);
+	rc_t rc_1 = rc_t{RC_INVALID};
+	rc_t rc_2 = rc_t{RC_INVALID};
+	printf("start warmup\n");
+	//printf("start chain stack evaluation\n");
+	//util::timer ti;
+	/*for (int i = 0; i < TIME_PARTITION; i++){
+		txn->xc->begin = timepoint[i];
+		printf("begin timestamp: %lu\n", txn->xc->begin);
+		util::timer ti_vr;
+		tbl_stock(1)->Get_eval(txn, rc_1, Encode(str(Size(k_s_0)), k_s_0), valptr, 1);
+		printf("%d vridgy: %lf\n", i, ti_vr.lap_ms());
+		util::timer ti_va;
+		tbl_stock(1)->Get_eval(txn, rc_2, Encode(str(Size(k_s_0)), k_s_0), valptr, 0);
+		printf("%d vanilla: %lf\n", i, ti_va.lap_ms());
+	}
+  TryCatch(db->Commit(txn));
+	printf("latency breakdown evaluation end\n");
+  return {RC_TRUE};*/
+
+	//printf("%lf\n", ti.lap_ms());
+	//printf("end chain stack evaluation\n");
 	TryCatch(tbl_stock(1)->Scan_eval(txn, Encode(str(Size(k_s_0)), k_s_0),
-																&Encode(str(Size(k_s_1)), k_s_1), s_scanner,
-																s_arena.get(), SCAN_VANILLA));
+																&Encode(str(Size(k_s_1)), k_s_1), s_scanner_0,
+																s_arena_0.get(), SCAN_VANILLA));
 
 	printf("end warmup\n");
-	printf("start vanilla scan evaluation\n");
+	}
+
+	printf("start vanilla uniform scan evaluation\n");
 
 	// 1. vanilla case
 	// latency evaluation per version chain length
-	FILE* lfp_vanilla = fopen("ermia_vanilla_latency.data", "a+");
 
 	for (int i = 0; i < TIME_PARTITION; i++) {
 		txn->xc->begin = timepoint[i];
 		// latency evaluation per scan range
 		for (int j = 1; j <= RANGE_PARTITION; j++) {
 			util::timer t;
-			ermia::scoped_str_arena s_arena(arena);
+			ermia::scoped_str_arena s_arena_1(arena);
 
-			static thread_local tpcc_table_scanner s_scanner(&arena);
-			s_scanner.clear();
+			static thread_local tpcc_table_scanner s_scanner_1(&arena);
+			s_scanner_1.clear();
 			const stock::key k_s_2(1, 1);
 			const stock::key k_s_3(1, j * RANGE_IN_STOCK);
 			TryCatch(tbl_stock(1)->Scan_eval(txn, Encode(str(Size(k_s_2)), k_s_2),
-																		&Encode(str(Size(k_s_3)), k_s_3), s_scanner,
-																		s_arena.get(), SCAN_VANILLA));
-			fprintf(lfp_vanilla, "%d, %lf\n", j - 1, t.lap_ms());
-			fflush(lfp_vanilla);
+																		&Encode(str(Size(k_s_3)), k_s_3), s_scanner_1,
+																		s_arena_1.get(), SCAN_VANILLA));
+			vanilla_uniform[i][j - 1] = t.lap_ms();
+			//fprintf(lfp_vanilla, "%d, %d, %lf\n", i + 1, j, t.lap_ms());
 		}
 	}
-	fclose(lfp_vanilla);
 
-	printf("start vridgy scan evaluation\n");
+	printf("start vridgy uniform scan evaluation\n");
 	// 2. vridgy_only case
 	// latency evaluation per version chain length
-	FILE* lfp_vridgy = fopen("ermia_vridgy_latency.data", "a+");
+	FILE* lfp_vridgy = fopen("ermia_vridgy_uniform_latency.data", "a+");
 
 	for (int i = 0; i < TIME_PARTITION; i++) {
 		txn->xc->begin = timepoint[i];
 		// latency evaluation per scan range
 		for (int j = 1; j <= RANGE_PARTITION; j++) {
 			util::timer t;
-			ermia::scoped_str_arena s_arena(arena);
+			ermia::scoped_str_arena s_arena_2(arena);
 
-			static thread_local tpcc_table_scanner s_scanner(&arena);
-			s_scanner.clear();
+			static thread_local tpcc_table_scanner s_scanner_2(&arena);
+			s_scanner_2.clear();
 			const stock::key k_s_4(1, 1);
 			const stock::key k_s_5(1, j * RANGE_IN_STOCK);
 			TryCatch(tbl_stock(1)->Scan_eval(txn, Encode(str(Size(k_s_4)), k_s_4),
-																		&Encode(str(Size(k_s_5)), k_s_5), s_scanner,
-																		s_arena.get(), SCAN_VRIDGY));
-			fprintf(lfp_vridgy, "%d, %lf\n", j - 1, t.lap_ms());
-			fflush(lfp_vridgy);
+																		&Encode(str(Size(k_s_5)), k_s_5), s_scanner_2,
+																		s_arena_2.get(), SCAN_VRIDGY));
+			vridgy_uniform[i][j - 1] = t.lap_ms();
+			//fprintf(lfp_vridgy, "%d, %d, %lf\n", i + 1, j, t.lap_ms());
 		}
 	}
-	fclose(lfp_vridgy);
 
-	printf("start vweaver scan evaluation\n");
+	printf("start vweaver uniform scan evaluation\n");
 	// 3. vweaver case
 	// latency evaluation per version chain length
-	FILE* lfp_vweaver = fopen("ermia_vweaver_latency.data", "a+");
+	FILE* lfp_vweaver = fopen("ermia_vweaver_uniform_latency.data", "a+");
 
 	for (int i = 0; i < TIME_PARTITION; i++) {
 		txn->xc->begin = timepoint[i];
 		// latency evaluation per scan range
 		for (int j = 1; j <= RANGE_PARTITION; j++) {
 			util::timer t;
-			ermia::scoped_str_arena s_arena(arena);
+			ermia::scoped_str_arena s_arena_3(arena);
 
-			static thread_local tpcc_table_scanner s_scanner(&arena);
-			s_scanner.clear();
+			static thread_local tpcc_table_scanner s_scanner_3(&arena);
+			s_scanner_3.clear();
 			const stock::key k_s_6(1, 1);
 			const stock::key k_s_7(1, j * RANGE_IN_STOCK);
 			TryCatch(tbl_stock(1)->Scan_eval(txn, Encode(str(Size(k_s_6)), k_s_6),
-																		&Encode(str(Size(k_s_7)), k_s_7), s_scanner,
-																		s_arena.get(), SCAN_VWEAVER));
-			fprintf(lfp_vweaver, "%d, %lf\n", j - 1, t.lap_ms());
-			fflush(lfp_vweaver);
+																		&Encode(str(Size(k_s_7)), k_s_7), s_scanner_3,
+																		s_arena_3.get(), SCAN_VWEAVER));
+			vweaver_uniform[i][j - 1] = t.lap_ms();
+			//fprintf(lfp_vweaver, "%d, %d, %lf\n", i + 1, j, t.lap_ms());
 		}
 	}
-	fclose(lfp_vweaver);
+
+	ermia::scoped_str_arena s_arena_4(arena);
+
+	static thread_local tpcc_table_scanner s_scanner_4(&arena);
+	s_scanner_4.clear();
+	const stock::key k_s_t1(1, 10001);
+	const stock::key k_s_t2(1, RANGE_PARTITION * RANGE_IN_STOCK + 10000);
+	printf("start warmup\n");
+	TryCatch(tbl_stock(1)->Scan_eval(txn, Encode(str(Size(k_s_t1)), k_s_t1),
+																&Encode(str(Size(k_s_t2)), k_s_t2), s_scanner_4,
+																s_arena_4.get(), SCAN_VANILLA));
+
+	printf("end warmup\n");
+
+	printf("start vanilla zipfian 0.8 scan evaluation\n");
+
+	// 1. vanilla case
+	// latency evaluation per version chain length
+
+	for (int i = 0; i < TIME_PARTITION; i++) {
+		txn->xc->begin = timepoint[i];
+		// latency evaluation per scan range
+		for (int j = 1; j <= RANGE_PARTITION; j++) {
+			util::timer t;
+			ermia::scoped_str_arena s_arena_5(arena);
+
+			static thread_local tpcc_table_scanner s_scanner_5(&arena);
+			s_scanner_5.clear();
+			const stock::key k_s_8(1, 10001);
+			const stock::key k_s_9(1, j * RANGE_IN_STOCK + 10000);
+			TryCatch(tbl_stock(1)->Scan_eval(txn, Encode(str(Size(k_s_8)), k_s_8),
+																		&Encode(str(Size(k_s_9)), k_s_9), s_scanner_5,
+																		s_arena_5.get(), SCAN_VANILLA));
+			vanilla_mid_skew[i][j - 1] = t.lap_ms();
+			//fprintf(lfp_vanilla, "%d, %d, %lf\n", i + 1, j, t.lap_ms());
+		}
+	}
+
+	printf("start vridgy zipfian 0.8 scan evaluation\n");
+	// 2. vridgy_only case
+	// latency evaluation per version chain length
+
+	for (int i = 0; i < TIME_PARTITION; i++) {
+		txn->xc->begin = timepoint[i];
+		// latency evaluation per scan range
+		for (int j = 1; j <= RANGE_PARTITION; j++) {
+			util::timer t;
+			ermia::scoped_str_arena s_arena_6(arena);
+
+			static thread_local tpcc_table_scanner s_scanner_6(&arena);
+			s_scanner_6.clear();
+			const stock::key k_s_10(1, 10001);
+			const stock::key k_s_11(1, j * RANGE_IN_STOCK + 10000);
+			TryCatch(tbl_stock(1)->Scan_eval(txn, Encode(str(Size(k_s_10)), k_s_10),
+																		&Encode(str(Size(k_s_11)), k_s_11), s_scanner_6,
+																		s_arena_6.get(), SCAN_VRIDGY));
+			vridgy_mid_skew[i][j - 1] = t.lap_ms();
+			//fprintf(lfp_vridgy, "%d, %d, %lf\n", i + 1, j, t.lap_ms());
+		}
+	}
+
+	printf("start vweaver zipfian 0.4 scan evaluation\n");
+	// 3. vweaver case
+	// latency evaluation per version chain length
+
+	for (int i = 0; i < TIME_PARTITION; i++) {
+		txn->xc->begin = timepoint[i];
+		// latency evaluation per scan range
+		for (int j = 1; j <= RANGE_PARTITION; j++) {
+			util::timer t;
+			ermia::scoped_str_arena s_arena_7(arena);
+
+			static thread_local tpcc_table_scanner s_scanner_7(&arena);
+			s_scanner_7.clear();
+			const stock::key k_s_12(1, 10001);
+			const stock::key k_s_13(1, j * RANGE_IN_STOCK + 10000);
+			TryCatch(tbl_stock(1)->Scan_eval(txn, Encode(str(Size(k_s_12)), k_s_12),
+																		&Encode(str(Size(k_s_13)), k_s_13), s_scanner_7,
+																		s_arena_7.get(), SCAN_VWEAVER));
+			vweaver_mid_skew[i][j - 1] = t.lap_ms();
+			//fprintf(lfp_vweaver, "%d, %d, %lf\n", i + 1, j, t.lap_ms());
+		}
+	}
+
+	ermia::scoped_str_arena s_arena_8(arena);
+
+	static thread_local tpcc_table_scanner s_scanner_8(&arena);
+	s_scanner_8.clear();
+	const stock::key k_s_t3(1, 20001);
+	const stock::key k_s_t4(1, RANGE_PARTITION * RANGE_IN_STOCK + 20000);
+	printf("start warmup\n");
+	TryCatch(tbl_stock(1)->Scan_eval(txn, Encode(str(Size(k_s_t3)), k_s_t3),
+																&Encode(str(Size(k_s_t4)), k_s_t4), s_scanner_8,
+																s_arena_8.get(), SCAN_VANILLA));
+
+	printf("end warmup\n");
+
+	printf("start vanilla zipfian 1.4 scan evaluation\n");
+
+	// 1. vanilla case
+	// latency evaluation per version chain length
+
+	for (int i = 0; i < TIME_PARTITION; i++) {
+		txn->xc->begin = timepoint[i];
+		// latency evaluation per scan range
+		for (int j = 1; j <= RANGE_PARTITION; j++) {
+			util::timer t;
+			ermia::scoped_str_arena s_arena_9(arena);
+
+			static thread_local tpcc_table_scanner s_scanner_9(&arena);
+			s_scanner_9.clear();
+			const stock::key k_s_14(1, 20001);
+			const stock::key k_s_15(1, j * RANGE_IN_STOCK + 20000);
+			TryCatch(tbl_stock(1)->Scan_eval(txn, Encode(str(Size(k_s_14)), k_s_14),
+																		&Encode(str(Size(k_s_15)), k_s_15), s_scanner_9,
+																		s_arena_9.get(), SCAN_VANILLA));
+			vanilla_high_skew[i][j - 1] = t.lap_ms();
+			//fprintf(lfp_vanilla, "%d, %d, %lf\n", i + 1, j, t.lap_ms());
+		}
+	}
+
+	printf("start vridgy zipfian 1.4 scan evaluation\n");
+	// 2. vridgy_only case
+	// latency evaluation per version chain length
+
+	for (int i = 0; i < TIME_PARTITION; i++) {
+		txn->xc->begin = timepoint[i];
+		// latency evaluation per scan range
+		for (int j = 1; j <= RANGE_PARTITION; j++) {
+			util::timer t;
+			ermia::scoped_str_arena s_arena_10(arena);
+
+			static thread_local tpcc_table_scanner s_scanner_10(&arena);
+			s_scanner_10.clear();
+			const stock::key k_s_16(1, 20001);
+			const stock::key k_s_17(1, j * RANGE_IN_STOCK + 20000);
+			TryCatch(tbl_stock(1)->Scan_eval(txn, Encode(str(Size(k_s_16)), k_s_16),
+																		&Encode(str(Size(k_s_17)), k_s_17), s_scanner_10,
+																		s_arena_10.get(), SCAN_VRIDGY));
+			vridgy_high_skew[i][j - 1] = t.lap_ms();
+			//fprintf(lfp_vridgy, "%d, %d, %lf\n", i + 1, j, t.lap_ms());
+		}
+	}
+
+	printf("start vweaver zipfian 1.4 scan evaluation\n");
+	// 3. vweaver case
+	// latency evaluation per version chain length
+
+	for (int i = 0; i < TIME_PARTITION; i++) {
+		txn->xc->begin = timepoint[i];
+		// latency evaluation per scan range
+		for (int j = 1; j <= RANGE_PARTITION; j++) {
+			util::timer t;
+			ermia::scoped_str_arena s_arena_11(arena);
+
+			static thread_local tpcc_table_scanner s_scanner_11(&arena);
+			s_scanner_11.clear();
+			const stock::key k_s_18(1, 20001);
+			const stock::key k_s_19(1, j * RANGE_IN_STOCK + 20000);
+			TryCatch(tbl_stock(1)->Scan_eval(txn, Encode(str(Size(k_s_18)), k_s_18),
+																		&Encode(str(Size(k_s_19)), k_s_19), s_scanner_11,
+																		s_arena_11.get(), SCAN_VWEAVER));
+			vweaver_high_skew[i][j - 1] = t.lap_ms();
+			//fprintf(lfp_vweaver, "%d, %d, %lf\n", i + 1, j, t.lap_ms());
+		}
+	}
+
+	FILE* fp_vanilla_uniform = fopen("vanilla_uniform_latency.data", "w+");
+	FILE* fp_vanilla_mid_skew = fopen("vanilla_mid_skew_latency.data", "w+");
+	FILE* fp_vanilla_high_skew = fopen("vanilla_high_skew_latency.data", "w+");
+	FILE* fp_vridgy_uniform = fopen("vridgy_uniform_latency.data", "w+");
+	FILE* fp_vridgy_mid_skew = fopen("vridgy_mid_skew_latency.data", "w+");
+	FILE* fp_vridgy_high_skew = fopen("vridgy_high_skew_latency.data", "w+");
+	FILE* fp_vweaver_uniform = fopen("vweaver_uniform_latency.data", "w+");
+	FILE* fp_vweaver_mid_skew = fopen("vweaver_mid_skew_latency.data", "w+");
+	FILE* fp_vweaver_high_skew = fopen("vweaver_high_skew_latency.data", "w+");
+
+	for (int i = TIME_PARTITION - 1; i >= 0; i--) {
+		for (int j = 0; j < RANGE_PARTITION; j++) {
+			fprintf(fp_vanilla_uniform, "%d, %d, %lf\n", 10-i, j+1,
+								vanilla_uniform[i][j]);
+			fflush(fp_vanilla_uniform);
+			fprintf(fp_vridgy_uniform, "%d, %d, %lf\n", 10-i, j+1,
+								vridgy_uniform[i][j]);
+			fflush(fp_vridgy_uniform);
+			fprintf(fp_vweaver_uniform, "%d, %d, %lf\n", 10-i, j+1,
+								vweaver_uniform[i][j]);
+			fflush(fp_vweaver_uniform);
+			
+			fprintf(fp_vanilla_mid_skew, "%d, %d, %lf\n", 10-i, j+1,
+								vanilla_mid_skew[i][j]);
+			fflush(fp_vanilla_mid_skew);
+			fprintf(fp_vridgy_mid_skew, "%d, %d, %lf\n", 10-i, j+1,
+								vridgy_mid_skew[i][j]);
+			fflush(fp_vridgy_mid_skew);
+			fprintf(fp_vweaver_mid_skew, "%d, %d, %lf\n", 10-i, j+1,
+								vweaver_mid_skew[i][j]);
+			fflush(fp_vweaver_mid_skew);
+			
+			fprintf(fp_vanilla_high_skew, "%d, %d, %lf\n", 10-i, j+1,
+								vanilla_high_skew[i][j]);
+			fprintf(fp_vridgy_high_skew, "%d, %d, %lf\n", 10-i, j+1,
+								vridgy_high_skew[i][j]);
+			fflush(fp_vridgy_high_skew);
+			fprintf(fp_vweaver_high_skew, "%d, %d, %lf\n", 10-i, j+1,
+								vweaver_high_skew[i][j]);
+			fflush(fp_vweaver_high_skew);
+			/*fprintf(fp_vridgy_uniform, "%d, %d, %lf\n", 10-i, j+1,
+								vanilla_uniform[i][j] / vridgy_uniform[i][j]);
+			fflush(fp_vridgy_uniform);
+			fprintf(fp_vweaver_uniform, "%d, %d, %lf\n", 10-i, j+1,
+								vanilla_uniform[i][j] / vweaver_uniform[i][j]);
+			fflush(fp_vweaver_uniform);
+			fprintf(fp_vridgy_mid_skew, "%d, %d, %lf\n", 10-i, j+1,
+								vanilla_mid_skew[i][j] / vridgy_mid_skew[i][j]);
+			fflush(fp_vridgy_mid_skew);
+			fprintf(fp_vweaver_mid_skew, "%d, %d, %lf\n", 10-i, j+1,
+								vanilla_mid_skew[i][j] / vweaver_mid_skew[i][j]);
+			fflush(fp_vweaver_mid_skew);
+			fprintf(fp_vridgy_high_skew, "%d, %d, %lf\n", 10-i, j+1,
+								vanilla_high_skew[i][j] / vridgy_high_skew[i][j]);
+			fflush(fp_vridgy_high_skew);
+			fprintf(fp_vweaver_high_skew, "%d, %d, %lf\n", 10-i, j+1,
+								vanilla_high_skew[i][j] / vweaver_high_skew[i][j]);
+			fflush(fp_vweaver_high_skew);*/
+		}
+	}
+	fclose(fp_vanilla_uniform);
+	fclose(fp_vridgy_uniform);
+	fclose(fp_vweaver_uniform);
+	fclose(fp_vanilla_mid_skew);
+	fclose(fp_vridgy_mid_skew);
+	fclose(fp_vweaver_mid_skew);
+	fclose(fp_vanilla_high_skew);
+	fclose(fp_vridgy_high_skew);
+	fclose(fp_vweaver_high_skew);
+
+
   TryCatch(db->Commit(txn));
 	printf("latency breakdown evaluation end\n");
   return {RC_TRUE};

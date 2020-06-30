@@ -1225,7 +1225,8 @@ fail:
 		
 			ASSERT(found);
 			ASSERT(oid == w.oid);
-			if (w.next_key_info.oid != next_oid) {
+			//if (w.next_key_info.oid != next_oid) {
+			if (next_ki == -1) {
 				goto commit_ts;
 			}
 		}
@@ -1250,6 +1251,7 @@ fail:
 			chk = true;
 		}
 #endif /* HYU_EVAL */
+
 commit_ts:
 
 #endif /* HYU_ZIGZAG */

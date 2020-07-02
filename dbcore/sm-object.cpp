@@ -112,7 +112,15 @@ fat_ptr Object::Create(const varstr *tuple_value, bool do_write,
 
   // Calculate tuple size
   const uint32_t data_sz = tuple_value ? tuple_value->size() : 0;
-  size_t alloc_sz = sizeof(dbtuple) + sizeof(Object) + data_sz;
+  /*uint32_t data_sz = tuple_value ? tuple_value->size() : 0; 
+#ifdef HYU_MOTIVATION
+	if (tuple_value && (tuple_value->data() == (uint8_t*)0x4 ||
+				tuple_value->data() == (uint8_t*)0x8)) {
+		data_sz = 0;
+		do_write = false;
+	}
+#endif*/
+	size_t alloc_sz = sizeof(dbtuple) + sizeof(Object) + data_sz;
 
   // Allocate a version
   Object *obj = new (MM::allocate(alloc_sz)) Object();
@@ -131,6 +139,16 @@ fat_ptr Object::Create(const varstr *tuple_value, bool do_write,
   dbtuple *tuple = (dbtuple *)obj->GetPayload();
   new (tuple) dbtuple(data_sz);
   ASSERT(tuple->pvalue == NULL);
+/*#ifdef HYU_MOTIVATION
+	if (tuple_value && (tuple_value->data() == (uint8_t*)0x4 ||
+				tuple_value->data() == (uint8_t*)0x8)) {
+		tuple->pvalue = NULL;
+	} else {
+		tuple->pvalue = (varstr *)tuple_value;
+	}
+#else
+  tuple->pvalue = (varstr *)tuple_value;
+#endif*/
   tuple->pvalue = (varstr *)tuple_value;
   if (do_write) {
     tuple->DoWrite();

@@ -173,6 +173,7 @@ struct dbtuple {
         return rc_t{RC_FALSE};
       }
       out_v->p = pvalue->data();
+			assert(pvalue->size() == size);
       //ASSERT(pvalue->size() == size);
 			// [HYU] evade assertion
 			if (pvalue->size() != size)
@@ -185,8 +186,10 @@ struct dbtuple {
   // move data from the user's varstr pvalue to this tuple
   inline void DoWrite() const {
     if (pvalue) {
-      ASSERT(pvalue->size() == size);
-      memcpy((void *)get_value_start(), pvalue->data(), pvalue->size());
+			//if (pvalue->data() != (uint8_t*)0x4 && pvalue->data() != (uint8_t*)0x8) {
+				ASSERT(pvalue->size() == size);
+				memcpy((void *)get_value_start(), pvalue->data(), pvalue->size());
+			//}
     }
   }
 };

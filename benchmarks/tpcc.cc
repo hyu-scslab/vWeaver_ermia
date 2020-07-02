@@ -2740,7 +2740,7 @@ rc_t tpcc_worker::txn_query2() {
   ermia::transaction *txn =
       db->NewTransaction(0, arena, txn_buf());
 
-#if defined(HYU_MOTIVATION) 
+/*#if defined(HYU_MOTIVATION) 
 	struct timeval end_tv, latency_tv;
 	int time_cnt = 0;
 	gettimeofday(&latency_tv, 0);
@@ -2786,8 +2786,17 @@ rc_t tpcc_worker::txn_query2() {
 			//std::cerr << "[" << time_count << "] Q2 end_latency_ms: " << std::endl;
 		}
 
-#else /* HYU_MOTIVATION */
+#else*/ /* HYU_MOTIVATION */
 // query2
+		struct timeval end_tv, latency_tv;
+		int time_cnt = 0;
+		gettimeofday(&latency_tv, 0);
+		if (start_latency_time == 0)
+			start_latency_time = latency_tv.tv_sec;
+
+		util::timer t;
+
+
 		ermia::scoped_str_arena s_arena(arena);
 
 		static thread_local tpcc_table_scanner r_scanner(&arena);
@@ -2921,7 +2930,23 @@ retry_stock:
 				}
 			}
 		}
-#endif /* HYU_MOTIVATION */
+
+		gettimeofday(&end_tv, 0);
+
+		if (end_tv.tv_sec - start_latency_time >= 10) {
+			time_cnt += end_tv.tv_sec - start_latency_time;
+			start_latency_time = end_tv.tv_sec;
+			FILE* lfp = fopen("latency.data", "a+");
+
+			fprintf(lfp, "%d, %lf\n", time_count, t.lap_ms());
+			fflush(lfp);
+			fclose(lfp);
+			time_count++;
+
+			//std::cerr << "[" << time_count << "] Q2 end_latency_ms: " << std::endl;
+		}
+
+//#endif /* HYU_MOTIVATION */
   TryCatch(db->Commit(txn));
   return {RC_TRUE};
 }

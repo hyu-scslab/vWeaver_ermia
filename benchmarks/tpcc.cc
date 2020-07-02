@@ -2751,7 +2751,7 @@ rc_t tpcc_worker::txn_query2() {
 
 		ermia::scoped_str_arena s_arena(arena);
 
-		for (int wh = 1; wh < 24; i++) {
+		for (int wh = 1; wh < 24; wh++) {
 			// [HYU] for vicious cycle
 			static thread_local tpcc_table_scanner s_scanner(&arena);
 			s_scanner.clear();

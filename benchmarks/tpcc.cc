@@ -2751,23 +2751,25 @@ rc_t tpcc_worker::txn_query2() {
 
 		ermia::scoped_str_arena s_arena(arena);
 
-		// [HYU] for vicious cycle
-		static thread_local tpcc_table_scanner s_scanner(&arena);
-		s_scanner.clear();
-		const stock::key k_s_0(1, 0);
-		const stock::key k_s_1(1, std::numeric_limits<int32_t>::max());
-		TryCatch(tbl_stock(1)->Scan(txn, Encode(str(Size(k_s_0)), k_s_0),
-																	&Encode(str(Size(k_s_1)), k_s_1), s_scanner,
-																	s_arena.get()));
-
-		for (int i = 1; i <= 10; i++) {
-			static thread_local tpcc_table_scanner c_scanner(&arena);
-			c_scanner.clear();
-			const customer::key k_c_0(1, i, 0);
-			const customer::key k_c_1(1, i, std::numeric_limits<int32_t>::max());
-			TryCatch(tbl_customer(1)->Scan(txn, Encode(str(Size(k_c_0)), k_c_0),
-																		&Encode(str(Size(k_c_1)), k_c_1), c_scanner,
+		for (int wh = 1; wh < 24; i++) {
+			// [HYU] for vicious cycle
+			static thread_local tpcc_table_scanner s_scanner(&arena);
+			s_scanner.clear();
+			const stock::key k_s_0(wh, 0);
+			const stock::key k_s_1(wh, std::numeric_limits<int32_t>::max());
+			TryCatch(tbl_stock(wh)->Scan(txn, Encode(str(Size(k_s_0)), k_s_0),
+																		&Encode(str(Size(k_s_1)), k_s_1), s_scanner,
 																		s_arena.get()));
+
+			for (int i = 1; i <= 10; i++) {
+				static thread_local tpcc_table_scanner c_scanner(&arena);
+				c_scanner.clear();
+				const customer::key k_c_0(wh, i, 0);
+				const customer::key k_c_1(wh, i, std::numeric_limits<int32_t>::max());
+				TryCatch(tbl_customer(wh)->Scan(txn, Encode(str(Size(k_c_0)), k_c_0),
+																			&Encode(str(Size(k_c_1)), k_c_1), c_scanner,
+																			s_arena.get()));
+			}
 		}
 		gettimeofday(&end_tv, 0);
 

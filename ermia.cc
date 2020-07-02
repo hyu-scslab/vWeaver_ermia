@@ -371,6 +371,7 @@ rc_t ConcurrentMasstreeIndex::DoTreePut(transaction &t, const varstr *k,
     if (rc._val != RC_FALSE) {
       return rc;
     }
+    return rc_t{RC_ABORT_INTERNAL};
   }
 
   // do regular search

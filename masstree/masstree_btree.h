@@ -733,9 +733,9 @@ private:
   F &callback_;
 };
 
+#ifdef HYU_EVAL_2 /* HYU_EVAL_2 */
 template <typename P>
 inline void
-#ifdef HYU_EVAL_2 /* HYU_EVAL_2 */
 mbtree<P>::search_range_call_eval(const key_type &lower, const key_type *upper,
                              low_level_search_range_callback &callback,
                              TXN::xid_context *xc, int scan_flag) const {

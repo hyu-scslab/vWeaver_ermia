@@ -173,7 +173,7 @@ struct dbtuple {
         return rc_t{RC_FALSE};
       }
       out_v->p = pvalue->data();
-			assert(pvalue->size() == size);
+			//assert(pvalue->size() == size);
       //ASSERT(pvalue->size() == size);
 			// [HYU] evade assertion
 			if (pvalue->size() != size)

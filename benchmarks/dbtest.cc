@@ -410,6 +410,9 @@ int main(int argc, char **argv) {
 #ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
 		std::cerr << "  HYU ZIGZAG  " << std::endl;
 #endif /* HYU_ZIGZAG */
+#ifdef HYU_MOTIVATION /* HYU_MOTIVATION */
+		std::cerr << "  HYU_MOTIVATION  " << std::endl;
+#endif /* HYU_MOTIVATION */
   }
 
   ermia::MM::prepare_node_memory();

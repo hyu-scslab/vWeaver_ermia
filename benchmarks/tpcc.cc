@@ -1641,8 +1641,11 @@ rc_t tpcc_worker::txn_delivery() {
 	uint64_t count = 0;
 	bool first = false;
 	uint64_t zipf_count[10000];
-	for (int i = 0; i < 10000; i++)
+	uint64_t zipf_mid_count[10000];
+	for (int i = 0; i < 10000; i++) {
 		zipf_count[i] = 0;
+		zipf_mid_count[i] = 0;
+	}
 
 	while(count < 200000) {
 		for (int i = 1; i <= 30000; i++) {
@@ -1673,7 +1676,9 @@ rc_t tpcc_worker::txn_delivery() {
 											->Put(txn, Encode(str(Size(k_s)), k_s),
 														Encode(str(Size(v_s_new)), v_s_new)));
 			} else if (i >= 10001 && i <= 20000) {
-				uint64_t zipf_val = zipfian_mid(0.4, 10000) + 10000;
+				uint64_t zipf_idx = zipfian_mid(0.4, 10000);
+				uint64_t zipf_val = zipf_idx + 10000;
+				zipf_mid_count[zipf_idx]++;
 				const stock::key k_s(1, zipf_val);
 				stock::value v_s_temp;
 
@@ -1716,11 +1721,15 @@ rc_t tpcc_worker::txn_delivery() {
 		}
 		count++;
 		if (count == 200000) {
-			FILE* fp = fopen("zipf_count", "w+");
+			FILE* fp = fopen("zipf_count.data", "w+");
+			FILE* mid_fp = fopen("zipf_mid_count.data", "w+");
 			for (int i = 0; i < 10000; i++) {
+				fprintf(mid_fp, "zipf_count[%d]: %lu\n", i, zipf_mid_count[i]);
+				fflush(mid_fp);
 				fprintf(fp, "zipf_count[%d]: %lu\n", i, zipf_count[i]);
 				fflush(fp);
 			}
+			fclose(mid_fp);
 			fclose(fp);
 		}
 	}

@@ -701,9 +701,12 @@ public:
     return callback_.invoke(key.full_string(), oid, this->v_);
   }
 
-// [HYU] for chk
-//private:
+#ifdef HYU_ZIGZAG
+ //[HYU] for chk
 public:
+#else
+private:
+#endif
   Masstree::leaf<P> *n_;
   uint64_t v_;
   low_level_search_range_callback &callback_;

@@ -121,12 +121,12 @@ void bench_worker::MyWork(char *) {
 			if (get_worker_id() == ermia::config::worker_threads) {
 				//printf("hi i'm worker %d\n", get_worker_id());
 				//if (start_flag == false) {
-				//if (--Q2_count >= 0) {
 #ifdef HYU_MOTIVATION /* HYU_MOTIVATION */
-					do_workload_function(5);
-#endif /* HYU_MOTIVATION */
+				if (--Q2_count >= 0) {
+					//do_workload_function(5);
 					//start_flag = true;
-				//}
+				}
+#endif /* HYU_MOTIVATION */
 				continue;
 			}
 
@@ -147,10 +147,12 @@ void bench_worker::MyWork(char *) {
       double d = r.next_uniform();
       for (size_t i = 0; i < workload.size(); i++) {
         if ((i + 1) == workload.size() || d < workload[i].frequency) {
+#ifdef HYU_MOTIVATION /* HYU_MOTIVATION */
 					if (!workload[i].name.compare("Query2")) {
-						Q2_count++;	
+						__sync_fetch_and_add(&Q2_count, 1);
 						break;
 					}
+#endif /* HYU_MOTIVATION */
           do_workload_function(i);
           break;
         }

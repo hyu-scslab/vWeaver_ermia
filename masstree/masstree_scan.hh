@@ -41,9 +41,12 @@ public:
     return n.n_->compare_key(k, p);
   }
 
+#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
 // [HYU] make public for using zigzag_move
 public:
-//private:
+#else /* HYU_ZIGZAG */
+private:
+#endif /* HYU_ZIGZAG */
   node_base<P> *root_;
   leaf<P> *n_;
   nodeversion_type v_;

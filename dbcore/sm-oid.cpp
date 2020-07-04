@@ -768,15 +768,11 @@ start_over:
   fat_ptr head = volatile_read(*ptr);
   ASSERT(head.asi_type() == 0);
   Object *old_desc = (Object *)head.offset();
-	Object *for_debug = old_desc;
-  ASSERT(old_desc != nullptr);
+  ASSERT(old_desc);
   ASSERT(head.size_code() != INVALID_SIZE_CODE);
   dbtuple *version = (dbtuple *)old_desc->GetPayload();
   bool overwrite = false;
 
-	if (old_desc == nullptr) {
-		return NULL_PTR;
-	}
   auto clsn = old_desc->GetClsn();
   if (clsn == NULL_PTR) {
     // stepping on an unlinked version?

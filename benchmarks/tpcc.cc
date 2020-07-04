@@ -1511,6 +1511,69 @@ uint64_t uniform(double alpha, uint64_t n, int64_t *seed)
 }
 
 /* We use zipf function from csee.usf.edu/~kchriste/tools/genzipf.c */
+uint64_t zipfian_mid(double alpha, uint64_t n)
+{
+  static int64_t seed = 1;
+	static int first = 1;      // Static first time flag
+  static double c = 0;          // Normalization constant
+  static double *sum_probs;     // Pre-calculated sum of probabilities
+  double z;                     // Uniform random number (0 < z < 1)
+  uint64_t zipf_value;               // Computed exponential value to be returned
+  int    i;                     // Loop counter
+  int low, high, mid;           // Binary-search bounds
+	/*random_device rd;
+	mt19937_64 gen(rd());
+	uniform_real_distribution<double> distribution(0.0, 1.0);*/
+
+  // Compute normalization constant on first call only
+  if (first == 1)
+  {
+    for (i=1; i<=n; i++)
+      c = c + (1.0 / pow((double) i, alpha));
+    c = 1.0 / c;
+
+    sum_probs = (double*)malloc((n+1)*sizeof(double));
+    sum_probs[0] = 0;
+    for (i=1; i<=n; i++) {
+      sum_probs[i] = sum_probs[i-1] + c / pow((double) i, alpha);
+    }
+    first = 0;
+  }
+
+  // Pull a uniform random number (0 < z < 1)
+  do
+  {
+		z = to_double(xorshift64s(&seed));
+		//z = distribution(gen);
+  }
+  while ((z == 0) || (z == 1));
+
+  // Map z to the value
+  low = 1, high = n, mid;
+  do {
+    mid = floor((low+high)/2);
+    if (sum_probs[mid] >= z && sum_probs[mid-1] < z) {
+      zipf_value = mid;
+      break;
+    } else if (sum_probs[mid] >= z) {
+      high = mid-1;
+    } else {
+      low = mid+1;
+    }
+  } while (low <= high);
+
+  // Assert that zipf_value is between 1 and N
+	if (zipf_value < 1) {
+		
+  	assert((zipf_value >=1) && (zipf_value <= n));
+	} else if (zipf_value > n) {
+		zipf_value %= n;
+	}
+
+  return(zipf_value);
+}
+
+/* We use zipf function from csee.usf.edu/~kchriste/tools/genzipf.c */
 uint64_t zipfian(double alpha, uint64_t n)
 {
   static int64_t seed = 1;
@@ -1577,10 +1640,13 @@ uint64_t zipfian(double alpha, uint64_t n)
 rc_t tpcc_worker::txn_delivery() {
 	uint64_t count = 0;
 	bool first = false;
+	uint64_t zipf_count[10000];
+	for (int i = 0; i < 10000; i++)
+		zipf_count[i] = 0;
 
 	while(count < 200000) {
 		for (int i = 1; i <= 30000; i++) {
-		//for (int i = 1; i <= 1; i++) {
+		//for (int i = 1; i <= 20000; i++) {
 			ermia::transaction *txn = db->NewTransaction(0, arena, txn_buf());
 			if (!first) {
 				first_begin = txn->xc->begin;
@@ -1607,7 +1673,7 @@ rc_t tpcc_worker::txn_delivery() {
 											->Put(txn, Encode(str(Size(k_s)), k_s),
 														Encode(str(Size(v_s_new)), v_s_new)));
 			} else if (i >= 10001 && i <= 20000) {
-				uint64_t zipf_val = zipfian(0.4, 10000) + 10000;
+				uint64_t zipf_val = zipfian_mid(0.4, 10000) + 10000;
 				const stock::key k_s(1, zipf_val);
 				stock::value v_s_temp;
 
@@ -1623,7 +1689,9 @@ rc_t tpcc_worker::txn_delivery() {
 											->Put(txn, Encode(str(Size(k_s)), k_s),
 														Encode(str(Size(v_s_new)), v_s_new)));
 			} else if (i >= 20001 && i <= 30000) {
-				uint64_t zipf_val = zipfian(1.4, 10000) + 20000;
+				uint64_t zipf_idx = zipfian(1.4, 10000);
+				uint64_t zipf_val = zipf_idx + 20000;
+				zipf_count[zipf_idx]++;
 				const stock::key k_s(1, zipf_val);
 				stock::value v_s_temp;
 
@@ -1640,12 +1708,21 @@ rc_t tpcc_worker::txn_delivery() {
 														Encode(str(Size(v_s_new)), v_s_new)));
 			}
 
+
 			TryCatch(db->Commit(txn));
 			if (ermia::config::command_log && !ermia::config::is_backup_srv()) {
 				ermia::CommandLog::cmd_log->Insert(1, TPCC_CLID_DELIVERY);
 			}
 		}
 		count++;
+		if (count == 200000) {
+			FILE* fp = fopen("zipf_count", "w+");
+			for (int i = 0; i < 10000; i++) {
+				fprintf(fp, "zipf_count[%d]: %lu\n", i, zipf_count[i]);
+				fflush(fp);
+			}
+			fclose(fp);
+		}
 	}
 	printf("finish create version chain\n");
   return {RC_TRUE};
@@ -1985,9 +2062,9 @@ rc_t tpcc_worker::txn_payment() {
 
 	//printf("%lf\n", ti.lap_ms());
 	//printf("end chain stack evaluation\n");
-	TryCatch(tbl_stock(1)->Scan_eval(txn, Encode(str(Size(k_s_0)), k_s_0),
-																&Encode(str(Size(k_s_1)), k_s_1), s_scanner_0,
-																s_arena_0.get(), SCAN_VANILLA));
+	//TryCatch(tbl_stock(1)->Scan_eval(txn, Encode(str(Size(k_s_0)), k_s_0),
+	//															&Encode(str(Size(k_s_1)), k_s_1), s_scanner_0,
+	//															s_arena_0.get(), SCAN_VANILLA));
 
 	printf("end warmup\n");
 	}
@@ -1997,7 +2074,7 @@ rc_t tpcc_worker::txn_payment() {
 	// 1. vanilla case
 	// latency evaluation per version chain length
 
-	for (int i = 0; i < TIME_PARTITION; i++) {
+	for (int i = TIME_PARTITION - 1; i >= 0; i--) {
 		txn->xc->begin = timepoint[i];
 		// latency evaluation per scan range
 		for (int j = 1; j <= RANGE_PARTITION; j++) {
@@ -2019,9 +2096,8 @@ rc_t tpcc_worker::txn_payment() {
 	printf("start vridgy uniform scan evaluation\n");
 	// 2. vridgy_only case
 	// latency evaluation per version chain length
-	FILE* lfp_vridgy = fopen("ermia_vridgy_uniform_latency.data", "a+");
 
-	for (int i = 0; i < TIME_PARTITION; i++) {
+	for (int i = TIME_PARTITION - 1; i >= 0; i--) {
 		txn->xc->begin = timepoint[i];
 		// latency evaluation per scan range
 		for (int j = 1; j <= RANGE_PARTITION; j++) {
@@ -2043,9 +2119,8 @@ rc_t tpcc_worker::txn_payment() {
 	printf("start vweaver uniform scan evaluation\n");
 	// 3. vweaver case
 	// latency evaluation per version chain length
-	FILE* lfp_vweaver = fopen("ermia_vweaver_uniform_latency.data", "a+");
 
-	for (int i = 0; i < TIME_PARTITION; i++) {
+	for (int i = TIME_PARTITION - 1; i >= 0; i--) {
 		txn->xc->begin = timepoint[i];
 		// latency evaluation per scan range
 		for (int j = 1; j <= RANGE_PARTITION; j++) {
@@ -2064,25 +2139,35 @@ rc_t tpcc_worker::txn_payment() {
 		}
 	}
 
-	ermia::scoped_str_arena s_arena_4(arena);
-
-	static thread_local tpcc_table_scanner s_scanner_4(&arena);
-	s_scanner_4.clear();
-	const stock::key k_s_t1(1, 10001);
-	const stock::key k_s_t2(1, RANGE_PARTITION * RANGE_IN_STOCK + 10000);
-	printf("start warmup\n");
-	TryCatch(tbl_stock(1)->Scan_eval(txn, Encode(str(Size(k_s_t1)), k_s_t1),
-																&Encode(str(Size(k_s_t2)), k_s_t2), s_scanner_4,
-																s_arena_4.get(), SCAN_VANILLA));
-
-	printf("end warmup\n");
-
-	printf("start vanilla zipfian 0.8 scan evaluation\n");
+	printf("start vanilla zipfian 0.4 scan evaluation\n");
 
 	// 1. vanilla case
 	// latency evaluation per version chain length
 
-	for (int i = 0; i < TIME_PARTITION; i++) {
+	for (int i = TIME_PARTITION - 1; i >= 0; i--) {
+		txn->xc->begin = timepoint[i];
+		// latency evaluation per scan range
+		for (int j = 1; j <= RANGE_PARTITION; j++) {
+			util::timer t;
+			ermia::scoped_str_arena s_arena_4(arena);
+
+			static thread_local tpcc_table_scanner s_scanner_4(&arena);
+			s_scanner_4.clear();
+			const stock::key k_s_8(1, 10001);
+			const stock::key k_s_9(1, j * RANGE_IN_STOCK + 10000);
+			TryCatch(tbl_stock(1)->Scan_eval(txn, Encode(str(Size(k_s_8)), k_s_8),
+																		&Encode(str(Size(k_s_9)), k_s_9), s_scanner_4,
+																		s_arena_4.get(), SCAN_VANILLA));
+			vanilla_mid_skew[i][j - 1] = t.lap_ms();
+			//fprintf(lfp_vanilla, "%d, %d, %lf\n", i + 1, j, t.lap_ms());
+		}
+	}
+
+	printf("start vridgy zipfian 0.4 scan evaluation\n");
+	// 2. vridgy_only case
+	// latency evaluation per version chain length
+
+	for (int i = TIME_PARTITION - 1; i >= 0; i--) {
 		txn->xc->begin = timepoint[i];
 		// latency evaluation per scan range
 		for (int j = 1; j <= RANGE_PARTITION; j++) {
@@ -2091,34 +2176,11 @@ rc_t tpcc_worker::txn_payment() {
 
 			static thread_local tpcc_table_scanner s_scanner_5(&arena);
 			s_scanner_5.clear();
-			const stock::key k_s_8(1, 10001);
-			const stock::key k_s_9(1, j * RANGE_IN_STOCK + 10000);
-			TryCatch(tbl_stock(1)->Scan_eval(txn, Encode(str(Size(k_s_8)), k_s_8),
-																		&Encode(str(Size(k_s_9)), k_s_9), s_scanner_5,
-																		s_arena_5.get(), SCAN_VANILLA));
-			vanilla_mid_skew[i][j - 1] = t.lap_ms();
-			//fprintf(lfp_vanilla, "%d, %d, %lf\n", i + 1, j, t.lap_ms());
-		}
-	}
-
-	printf("start vridgy zipfian 0.8 scan evaluation\n");
-	// 2. vridgy_only case
-	// latency evaluation per version chain length
-
-	for (int i = 0; i < TIME_PARTITION; i++) {
-		txn->xc->begin = timepoint[i];
-		// latency evaluation per scan range
-		for (int j = 1; j <= RANGE_PARTITION; j++) {
-			util::timer t;
-			ermia::scoped_str_arena s_arena_6(arena);
-
-			static thread_local tpcc_table_scanner s_scanner_6(&arena);
-			s_scanner_6.clear();
 			const stock::key k_s_10(1, 10001);
 			const stock::key k_s_11(1, j * RANGE_IN_STOCK + 10000);
 			TryCatch(tbl_stock(1)->Scan_eval(txn, Encode(str(Size(k_s_10)), k_s_10),
-																		&Encode(str(Size(k_s_11)), k_s_11), s_scanner_6,
-																		s_arena_6.get(), SCAN_VRIDGY));
+																		&Encode(str(Size(k_s_11)), k_s_11), s_scanner_5,
+																		s_arena_5.get(), SCAN_VRIDGY));
 			vridgy_mid_skew[i][j - 1] = t.lap_ms();
 			//fprintf(lfp_vridgy, "%d, %d, %lf\n", i + 1, j, t.lap_ms());
 		}
@@ -2128,35 +2190,37 @@ rc_t tpcc_worker::txn_payment() {
 	// 3. vweaver case
 	// latency evaluation per version chain length
 
-	for (int i = 0; i < TIME_PARTITION; i++) {
+	for (int i = TIME_PARTITION - 1; i >= 0; i--) {
 		txn->xc->begin = timepoint[i];
 		// latency evaluation per scan range
 		for (int j = 1; j <= RANGE_PARTITION; j++) {
 			util::timer t;
-			ermia::scoped_str_arena s_arena_7(arena);
+			ermia::scoped_str_arena s_arena_6(arena);
 
-			static thread_local tpcc_table_scanner s_scanner_7(&arena);
-			s_scanner_7.clear();
+			static thread_local tpcc_table_scanner s_scanner_6(&arena);
+			s_scanner_6.clear();
 			const stock::key k_s_12(1, 10001);
 			const stock::key k_s_13(1, j * RANGE_IN_STOCK + 10000);
 			TryCatch(tbl_stock(1)->Scan_eval(txn, Encode(str(Size(k_s_12)), k_s_12),
-																		&Encode(str(Size(k_s_13)), k_s_13), s_scanner_7,
-																		s_arena_7.get(), SCAN_VWEAVER));
+																		&Encode(str(Size(k_s_13)), k_s_13), s_scanner_6,
+																		s_arena_6.get(), SCAN_VWEAVER));
 			vweaver_mid_skew[i][j - 1] = t.lap_ms();
 			//fprintf(lfp_vweaver, "%d, %d, %lf\n", i + 1, j, t.lap_ms());
 		}
 	}
 
-	ermia::scoped_str_arena s_arena_8(arena);
+
+
+	/*ermia::scoped_str_arena s_arena_8(arena);
 
 	static thread_local tpcc_table_scanner s_scanner_8(&arena);
 	s_scanner_8.clear();
-	const stock::key k_s_t3(1, 20001);
-	const stock::key k_s_t4(1, RANGE_PARTITION * RANGE_IN_STOCK + 20000);
+	const stock::key k_s_t3(1, 10001);
+	const stock::key k_s_t4(1, RANGE_PARTITION * RANGE_IN_STOCK + 10000);
 	printf("start warmup\n");
 	TryCatch(tbl_stock(1)->Scan_eval(txn, Encode(str(Size(k_s_t3)), k_s_t3),
 																&Encode(str(Size(k_s_t4)), k_s_t4), s_scanner_8,
-																s_arena_8.get(), SCAN_VANILLA));
+																s_arena_8.get(), SCAN_VANILLA));*/
 
 	printf("end warmup\n");
 
@@ -2165,7 +2229,7 @@ rc_t tpcc_worker::txn_payment() {
 	// 1. vanilla case
 	// latency evaluation per version chain length
 
-	for (int i = 0; i < TIME_PARTITION; i++) {
+	for (int i = TIME_PARTITION - 1; i >= 0; i--) {
 		txn->xc->begin = timepoint[i];
 		// latency evaluation per scan range
 		for (int j = 1; j <= RANGE_PARTITION; j++) {
@@ -2188,7 +2252,7 @@ rc_t tpcc_worker::txn_payment() {
 	// 2. vridgy_only case
 	// latency evaluation per version chain length
 
-	for (int i = 0; i < TIME_PARTITION; i++) {
+	for (int i = TIME_PARTITION - 1; i >= 0; i--) {
 		txn->xc->begin = timepoint[i];
 		// latency evaluation per scan range
 		for (int j = 1; j <= RANGE_PARTITION; j++) {
@@ -2211,7 +2275,7 @@ rc_t tpcc_worker::txn_payment() {
 	// 3. vweaver case
 	// latency evaluation per version chain length
 
-	for (int i = 0; i < TIME_PARTITION; i++) {
+	for (int i = TIME_PARTITION - 1; i >= 0; i--) {
 		txn->xc->begin = timepoint[i];
 		// latency evaluation per scan range
 		for (int j = 1; j <= RANGE_PARTITION; j++) {
@@ -2254,14 +2318,13 @@ rc_t tpcc_worker::txn_payment() {
 			
 			fprintf(fp_vanilla_mid_skew, "%d, %d, %lf\n", 10-i, j+1,
 								vanilla_mid_skew[i][j]);
-			fflush(fp_vanilla_mid_skew);
 			fprintf(fp_vridgy_mid_skew, "%d, %d, %lf\n", 10-i, j+1,
 								vridgy_mid_skew[i][j]);
 			fflush(fp_vridgy_mid_skew);
 			fprintf(fp_vweaver_mid_skew, "%d, %d, %lf\n", 10-i, j+1,
 								vweaver_mid_skew[i][j]);
 			fflush(fp_vweaver_mid_skew);
-			
+
 			fprintf(fp_vanilla_high_skew, "%d, %d, %lf\n", 10-i, j+1,
 								vanilla_high_skew[i][j]);
 			fprintf(fp_vridgy_high_skew, "%d, %d, %lf\n", 10-i, j+1,
@@ -2276,13 +2339,7 @@ rc_t tpcc_worker::txn_payment() {
 			fprintf(fp_vweaver_uniform, "%d, %d, %lf\n", 10-i, j+1,
 								vanilla_uniform[i][j] / vweaver_uniform[i][j]);
 			fflush(fp_vweaver_uniform);
-			fprintf(fp_vridgy_mid_skew, "%d, %d, %lf\n", 10-i, j+1,
-								vanilla_mid_skew[i][j] / vridgy_mid_skew[i][j]);
-			fflush(fp_vridgy_mid_skew);
-			fprintf(fp_vweaver_mid_skew, "%d, %d, %lf\n", 10-i, j+1,
-								vanilla_mid_skew[i][j] / vweaver_mid_skew[i][j]);
-			fflush(fp_vweaver_mid_skew);
-			fprintf(fp_vridgy_high_skew, "%d, %d, %lf\n", 10-i, j+1,
+						fprintf(fp_vridgy_high_skew, "%d, %d, %lf\n", 10-i, j+1,
 								vanilla_high_skew[i][j] / vridgy_high_skew[i][j]);
 			fflush(fp_vridgy_high_skew);
 			fprintf(fp_vweaver_high_skew, "%d, %d, %lf\n", 10-i, j+1,
@@ -2740,7 +2797,7 @@ rc_t tpcc_worker::txn_query2() {
   ermia::transaction *txn =
       db->NewTransaction(0, arena, txn_buf());
 
-/*#if defined(HYU_MOTIVATION) 
+#if defined(HYU_MOTIVATION) 
 	struct timeval end_tv, latency_tv;
 	int time_cnt = 0;
 	gettimeofday(&latency_tv, 0);
@@ -2751,7 +2808,7 @@ rc_t tpcc_worker::txn_query2() {
 
 		ermia::scoped_str_arena s_arena(arena);
 
-		for (int wh = 1; wh < 24; wh++) {
+		for (int wh = 1; wh < 11; wh++) {
 			// [HYU] for vicious cycle
 			static thread_local tpcc_table_scanner s_scanner(&arena);
 			s_scanner.clear();
@@ -2773,7 +2830,7 @@ rc_t tpcc_worker::txn_query2() {
 		}
 		gettimeofday(&end_tv, 0);
 
-		if (end_tv.tv_sec - start_latency_time >= 10) {
+		if (end_tv.tv_sec - start_latency_time >= 1) {
 			time_cnt += end_tv.tv_sec - start_latency_time;
 			start_latency_time = end_tv.tv_sec;
 			FILE* lfp = fopen("latency.data", "a+");
@@ -2786,16 +2843,15 @@ rc_t tpcc_worker::txn_query2() {
 			//std::cerr << "[" << time_count << "] Q2 end_latency_ms: " << std::endl;
 		}
 
-#else*/ /* HYU_MOTIVATION */
+#else /* HYU_MOTIVATION */
 // query2
-		struct timeval end_tv, latency_tv;
+		/*struct timeval end_tv, latency_tv;
 		int time_cnt = 0;
 		gettimeofday(&latency_tv, 0);
 		if (start_latency_time == 0)
 			start_latency_time = latency_tv.tv_sec;
 
-		util::timer t;
-
+		util::timer t;*/
 
 		ermia::scoped_str_arena s_arena(arena);
 
@@ -2931,7 +2987,7 @@ retry_stock:
 			}
 		}
 
-		gettimeofday(&end_tv, 0);
+		/*gettimeofday(&end_tv, 0);
 
 		if (end_tv.tv_sec - start_latency_time >= 10) {
 			time_cnt += end_tv.tv_sec - start_latency_time;
@@ -2944,9 +3000,9 @@ retry_stock:
 			time_count++;
 
 			//std::cerr << "[" << time_count << "] Q2 end_latency_ms: " << std::endl;
-		}
+		}*/
 
-//#endif /* HYU_MOTIVATION */
+#endif /* HYU_MOTIVATION */
   TryCatch(db->Commit(txn));
   return {RC_TRUE};
 }

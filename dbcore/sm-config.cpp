@@ -28,7 +28,7 @@ uint64_t ssn_read_opt_threshold = SSN_READ_OPT_DISABLED;
 int wait_for_backups = 0;
 int num_backups = 0;
 std::atomic<uint32_t> num_active_backups(0);
-uint64_t log_buffer_mb = 128;
+uint64_t log_buffer_mb = 256;
 uint64_t log_segment_mb = 131072; // default is 8192
 uint32_t log_redo_partitions = 0;
 std::string log_dir("");
@@ -55,7 +55,7 @@ bool log_ship_by_rdma = false;
 bool log_key_for_update = false;
 bool enable_chkpt = 0;
 uint64_t chkpt_interval = 50;
-bool phantom_prot = true; // default is 0
+bool phantom_prot = 0; // default is 0
 double cycles_per_byte = 0;
 uint32_t state = kStateLoading;
 int replay_policy = kReplayPipelined;

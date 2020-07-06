@@ -237,6 +237,7 @@ struct LSN {
         p.asi_type() != fat_ptr::ASI_LOG and p.asi_type() != fat_ptr::ASI_EXT,
         illegal_argument, "Attempt to convert non-LSN fat_ptr to LSN");*/
 
+		//printf("p.asi_type(): %d\n", p.asi_type());
 		ASSERT(p.asi_type() == fat_ptr::ASI_LOG || p.asi_type() == fat_ptr::ASI_EXT);
 
     return LSN::make(p.offset(), p.asi_segment());

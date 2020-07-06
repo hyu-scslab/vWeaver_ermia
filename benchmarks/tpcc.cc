@@ -2050,13 +2050,12 @@ rc_t tpcc_worker::txn_payment() {
 	// latency evaluation per scan range
 	{
 	ermia::scoped_str_arena s_arena_0(arena);
-
 #ifdef HYU_CHAIN_INFO /* HYU_CHAIN_INFO */
 	static int count = 1;
 	static thread_local tpcc_table_scanner s_scanner_0(&arena);
 	s_scanner_0.clear();
 	const stock::key k_s_0(1, 1);
-	const stock::key k_s_1(1, RANGE_PARTITION * RANGE_IN_STOCK);
+	const stock::key k_s_1(1, 10000);
 	ermia::varstr valptr;
 	rc_t rc_1 = rc_t{RC_INVALID};
 	rc_t rc_2 = rc_t{RC_INVALID};
@@ -2066,18 +2065,21 @@ rc_t tpcc_worker::txn_payment() {
 	for (int i = TIME_PARTITION - 1; i >= 0; i--){
 		txn->xc->begin = timepoint[i];
 		//printf("begin timestamp: %lu\n", txn->xc->begin);
-		tbl_stock(1)->Get_eval(txn, rc_1, Encode(str(Size(k_s_0)), k_s_0), valptr, 1);
+		TryCatch(tbl_stock(1)->Scan_eval(txn, Encode(str(Size(k_s_0)), k_s_0),
+																	&Encode(str(Size(k_s_1)), k_s_1), s_scanner_0,
+																	s_arena_0.get(), SCAN_VWEAVER));
+		//tbl_stock(1)->Get_eval(txn, rc_1, Encode(str(Size(k_s_0)), k_s_0), valptr, 1);
 		//printf("%d vridgy: %lf\n", i, ti_vr.lap_ms());
 		util::timer ti_vr;
 		FILE* chain_fp = fopen("chain_count.data", "a+");
 		fprintf(chain_fp, "%d, %d, %lf\n", 10-i, count, ti_vr.lap_ms());
 		fflush(chain_fp);
 		fclose(chain_fp);
-		count++;
 		//util::timer ti_va;
 		//tbl_stock(1)->Get_eval(txn, rc_2, Encode(str(Size(k_s_0)), k_s_0), valptr, 0);
 		//printf("%d vanilla: %lf\n", i, ti_va.lap_ms());
 	}
+	count++;
   TryCatch(db->Commit(txn));
 	printf("latency breakdown evaluation end\n");
   return {RC_TRUE};
@@ -2881,7 +2883,7 @@ rc_t tpcc_worker::txn_query2() {
 
 	gettimeofday(&end_tv, 0);
 
-	if (end_tv.tv_sec - start_latency_time >= 1) {
+	//if (end_tv.tv_sec - start_latency_time >= 1) {
 		time_count += end_tv.tv_sec - start_latency_time;
 		start_latency_time = end_tv.tv_sec;
 
@@ -2889,7 +2891,7 @@ rc_t tpcc_worker::txn_query2() {
 		fflush(lfp);
 		//time_count++;
 		//std::cerr << "[" << time_count << "] Q2 end_latency_ms: " << std::endl;
-	}
+	//}
 
 	fclose(lfp);
 

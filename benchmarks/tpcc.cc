@@ -56,6 +56,7 @@ static uint g_microbench_rows = 10;  // this many rows
 static int g_microbench_wr_rows = 0;  // this number of rows to write
 static int g_nr_suppliers = 10000; //default is 10000
 #ifdef HYU_EVAL_2 /* HYU_EVAL_2 */
+bool first = false;
 uint64_t first_begin = 0;
 #endif /* HYU_EVAL_2 */
 
@@ -1639,7 +1640,6 @@ uint64_t zipfian(double alpha, uint64_t n)
 // function for create version chain
 rc_t tpcc_worker::txn_delivery() {
 	uint64_t count = 0;
-	bool first = false;
 	uint64_t zipf_count[10000];
 	uint64_t zipf_mid_count[10000];
 	for (int i = 0; i < 10000; i++) {
@@ -2049,11 +2049,8 @@ rc_t tpcc_worker::txn_payment() {
 	txn->xc->begin = timepoint[0];
 	// latency evaluation per scan range
 	{
-	ermia::scoped_str_arena s_arena_0(arena);
 #ifdef HYU_CHAIN_INFO /* HYU_CHAIN_INFO */
 	static int count = 1;
-	static thread_local tpcc_table_scanner s_scanner_0(&arena);
-	s_scanner_0.clear();
 	const stock::key k_s_0(1, 1);
 	const stock::key k_s_1(1, 10000);
 	ermia::varstr valptr;
@@ -2063,16 +2060,26 @@ rc_t tpcc_worker::txn_payment() {
 	printf("start chain stack evaluation\n");
 	//util::timer ti;
 	for (int i = TIME_PARTITION - 1; i >= 0; i--){
+		double result;
+		ermia::scoped_str_arena s_arena_0(arena);
+		static thread_local tpcc_table_scanner s_scanner_0(&arena);
+		s_scanner_0.clear();
+
 		txn->xc->begin = timepoint[i];
 		//printf("begin timestamp: %lu\n", txn->xc->begin);
 		TryCatch(tbl_stock(1)->Scan_eval(txn, Encode(str(Size(k_s_0)), k_s_0),
 																	&Encode(str(Size(k_s_1)), k_s_1), s_scanner_0,
 																	s_arena_0.get(), SCAN_VWEAVER));
+		s_scanner_0.clear();
+		FILE* chain_fp = fopen("chain_count.data", "a+");
+		util::timer ti_vr;
+		TryCatch(tbl_stock(1)->Scan_eval(txn, Encode(str(Size(k_s_0)), k_s_0),
+																	&Encode(str(Size(k_s_1)), k_s_1), s_scanner_0,
+																	s_arena_0.get(), SCAN_VWEAVER));
 		//tbl_stock(1)->Get_eval(txn, rc_1, Encode(str(Size(k_s_0)), k_s_0), valptr, 1);
 		//printf("%d vridgy: %lf\n", i, ti_vr.lap_ms());
-		util::timer ti_vr;
-		FILE* chain_fp = fopen("chain_count.data", "a+");
-		fprintf(chain_fp, "%d, %d, %lf\n", 10-i, count, ti_vr.lap_ms());
+		result = ti_vr.lap_ms();	
+		fprintf(chain_fp, "%d, %d, %lf\n", 10-i, count, result);
 		fflush(chain_fp);
 		fclose(chain_fp);
 		//util::timer ti_va;
@@ -2814,12 +2821,21 @@ rc_t tpcc_worker::txn_query2() {
   ermia::transaction *txn =
       db->NewTransaction(0, arena, txn_buf());
 
-#ifdef HYU_MOTIVATION
+#ifdef HYU_MOTIVATION /* HYU_MOTIVATION */
 	struct timeval end_tv, latency_tv;
 	int time_cnt = 0;
 	static int think = 0;
 	double before, after;
-	FILE* lfp = fopen("latency.data", "a+");
+#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+	FILE* lfp = fopen("vweaver_latency_diff.data", "a+");
+	FILE* before_fp = fopen("vweaver_before_latency.data", "a+");
+	FILE* after_fp = fopen("vweaver_after_latency.data", "a+");
+#else /* HYU_ZIGZAG */
+	FILE* lfp = fopen("vanilla_latency_diff.data", "a+");
+	FILE* before_fp = fopen("vanilla_before_latency.data", "a+");
+	FILE* after_fp = fopen("vanilla_after_latency.data", "a+");
+#endif /* HYU_ZIGZAG */
+
 	gettimeofday(&latency_tv, 0);
 	if (start_latency_time == 0)
 		start_latency_time = latency_tv.tv_sec;
@@ -2850,9 +2866,12 @@ rc_t tpcc_worker::txn_query2() {
 	}
 	
 	before = t.lap_ms();
+
+	fprintf(before_fp, "%d, %lf\n", think, before);
+	fflush(before_fp);
+
 	// think time
 	sleep(think);
-	think++;
 
 	util::timer t2;
 
@@ -2881,19 +2900,25 @@ rc_t tpcc_worker::txn_query2() {
 
 	after = t2.lap_ms();
 
+	fprintf(after_fp, "%d, %lf\n", think, after);
+	fflush(after_fp);
+
 	gettimeofday(&end_tv, 0);
 
 	//if (end_tv.tv_sec - start_latency_time >= 1) {
-		time_count += end_tv.tv_sec - start_latency_time;
-		start_latency_time = end_tv.tv_sec;
+		//time_count += end_tv.tv_sec - start_latency_time;
+		//start_latency_time = end_tv.tv_sec;
 
-		fprintf(lfp, "%d, %lf\n", time_count, after - before);
+		fprintf(lfp, "%d, %lf\n", think, after - before);
 		fflush(lfp);
 		//time_count++;
 		//std::cerr << "[" << time_count << "] Q2 end_latency_ms: " << std::endl;
 	//}
 
+	fclose(before_fp);
+	fclose(after_fp);
 	fclose(lfp);
+	think++;
 
 #else /* HYU_MOTIVATION */
 // query2

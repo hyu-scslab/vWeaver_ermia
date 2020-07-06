@@ -1647,9 +1647,13 @@ rc_t tpcc_worker::txn_delivery() {
 		zipf_mid_count[i] = 0;
 	}
 
+#ifdef HYU_CHAIN_INFO /* HYU_CHAIN_INFO*/
+	while(count < 600000000) {
+		for (int i = 1; i <= 1; i++) {
+#else /* HYU_CHAIN_INFO */
 	while(count < 200000) {
 		for (int i = 1; i <= 30000; i++) {
-		//for (int i = 1; i <= 20000; i++) {
+#endif /* HYU_CHAIN_INFO */
 			ermia::transaction *txn = db->NewTransaction(0, arena, txn_buf());
 			if (!first) {
 				first_begin = txn->xc->begin;
@@ -1720,6 +1724,7 @@ rc_t tpcc_worker::txn_delivery() {
 			}
 		}
 		count++;
+#ifndef HYU_CHAIN_INFO /* HYU_CHAIN_INFO */
 		if (count == 200000) {
 			FILE* fp = fopen("zipf_count.data", "w+");
 			FILE* mid_fp = fopen("zipf_mid_count.data", "w+");
@@ -1732,6 +1737,7 @@ rc_t tpcc_worker::txn_delivery() {
 			fclose(mid_fp);
 			fclose(fp);
 		}
+#endif /* HYU_CHAIN_INFO */
 	}
 	printf("finish create version chain\n");
   return {RC_TRUE};
@@ -2045,6 +2051,8 @@ rc_t tpcc_worker::txn_payment() {
 	{
 	ermia::scoped_str_arena s_arena_0(arena);
 
+#ifdef HYU_CHAIN_INFO /* HYU_CHAIN_INFO */
+	static int count = 1;
 	static thread_local tpcc_table_scanner s_scanner_0(&arena);
 	s_scanner_0.clear();
 	const stock::key k_s_0(1, 1);
@@ -2052,30 +2060,28 @@ rc_t tpcc_worker::txn_payment() {
 	ermia::varstr valptr;
 	rc_t rc_1 = rc_t{RC_INVALID};
 	rc_t rc_2 = rc_t{RC_INVALID};
-	printf("start warmup\n");
-	//printf("start chain stack evaluation\n");
+	//printf("start warmup\n");
+	printf("start chain stack evaluation\n");
 	//util::timer ti;
-	/*for (int i = 0; i < TIME_PARTITION; i++){
+	for (int i = TIME_PARTITION - 1; i >= 0; i--){
 		txn->xc->begin = timepoint[i];
-		printf("begin timestamp: %lu\n", txn->xc->begin);
-		util::timer ti_vr;
+		//printf("begin timestamp: %lu\n", txn->xc->begin);
 		tbl_stock(1)->Get_eval(txn, rc_1, Encode(str(Size(k_s_0)), k_s_0), valptr, 1);
-		printf("%d vridgy: %lf\n", i, ti_vr.lap_ms());
-		util::timer ti_va;
-		tbl_stock(1)->Get_eval(txn, rc_2, Encode(str(Size(k_s_0)), k_s_0), valptr, 0);
-		printf("%d vanilla: %lf\n", i, ti_va.lap_ms());
+		//printf("%d vridgy: %lf\n", i, ti_vr.lap_ms());
+		util::timer ti_vr;
+		FILE* chain_fp = fopen("chain_count.data", "a+");
+		fprintf(chain_fp, "%d, %d, %lf\n", 10-i, count, ti_vr.lap_ms());
+		fflush(chain_fp);
+		fclose(chain_fp);
+		count++;
+		//util::timer ti_va;
+		//tbl_stock(1)->Get_eval(txn, rc_2, Encode(str(Size(k_s_0)), k_s_0), valptr, 0);
+		//printf("%d vanilla: %lf\n", i, ti_va.lap_ms());
 	}
   TryCatch(db->Commit(txn));
 	printf("latency breakdown evaluation end\n");
-  return {RC_TRUE};*/
-
-	//printf("%lf\n", ti.lap_ms());
-	//printf("end chain stack evaluation\n");
-	//TryCatch(tbl_stock(1)->Scan_eval(txn, Encode(str(Size(k_s_0)), k_s_0),
-	//															&Encode(str(Size(k_s_1)), k_s_1), s_scanner_0,
-	//															s_arena_0.get(), SCAN_VANILLA));
-
-	printf("end warmup\n");
+  return {RC_TRUE};
+#endif /* HYU_CHAIN_INFO */
 	}
 
 	printf("start vanilla uniform scan evaluation\n");
@@ -2806,51 +2812,86 @@ rc_t tpcc_worker::txn_query2() {
   ermia::transaction *txn =
       db->NewTransaction(0, arena, txn_buf());
 
-#if defined(HYU_MOTIVATION) 
+#ifdef HYU_MOTIVATION
 	struct timeval end_tv, latency_tv;
 	int time_cnt = 0;
+	static int think = 0;
+	double before, after;
+	FILE* lfp = fopen("latency.data", "a+");
 	gettimeofday(&latency_tv, 0);
 	if (start_latency_time == 0)
 		start_latency_time = latency_tv.tv_sec;
 
-		util::timer t;
+	util::timer t;
 
+	for (int wh = 1; wh < 11; wh++) {
 		ermia::scoped_str_arena s_arena(arena);
+		// [HYU] for vicious cycle
+		static thread_local tpcc_table_scanner s_scanner(&arena);
+		s_scanner.clear();
+		const stock::key k_s_0(wh, 0);
+		const stock::key k_s_1(wh, std::numeric_limits<int32_t>::max());
+		TryCatch(tbl_stock(wh)->Scan(txn, Encode(str(Size(k_s_0)), k_s_0),
+																	&Encode(str(Size(k_s_1)), k_s_1), s_scanner,
+																	s_arena.get()));
 
-		for (int wh = 1; wh < 11; wh++) {
-			// [HYU] for vicious cycle
-			static thread_local tpcc_table_scanner s_scanner(&arena);
-			s_scanner.clear();
-			const stock::key k_s_0(wh, 0);
-			const stock::key k_s_1(wh, std::numeric_limits<int32_t>::max());
-			TryCatch(tbl_stock(wh)->Scan(txn, Encode(str(Size(k_s_0)), k_s_0),
-																		&Encode(str(Size(k_s_1)), k_s_1), s_scanner,
+		for (int d = 1; d <= 10; d++) {
+			static thread_local tpcc_table_scanner c_scanner(&arena);
+			c_scanner.clear();
+			const customer::key k_c_0(wh, d, 0);
+			const customer::key k_c_1(wh, d, std::numeric_limits<int32_t>::max());
+			TryCatch(tbl_customer(wh)->Scan(txn, Encode(str(Size(k_c_0)), k_c_0),
+																		&Encode(str(Size(k_c_1)), k_c_1), c_scanner,
 																		s_arena.get()));
 
-			for (int i = 1; i <= 10; i++) {
-				static thread_local tpcc_table_scanner c_scanner(&arena);
-				c_scanner.clear();
-				const customer::key k_c_0(wh, i, 0);
-				const customer::key k_c_1(wh, i, std::numeric_limits<int32_t>::max());
-				TryCatch(tbl_customer(wh)->Scan(txn, Encode(str(Size(k_c_0)), k_c_0),
-																			&Encode(str(Size(k_c_1)), k_c_1), c_scanner,
-																			s_arena.get()));
-			}
 		}
-		gettimeofday(&end_tv, 0);
+	}
+	
+	before = t.lap_ms();
+	// think time
+	sleep(think);
+	think++;
 
-		if (end_tv.tv_sec - start_latency_time >= 1) {
-			time_cnt += end_tv.tv_sec - start_latency_time;
-			start_latency_time = end_tv.tv_sec;
-			FILE* lfp = fopen("latency.data", "a+");
+	util::timer t2;
 
-			fprintf(lfp, "%d, %lf\n", time_count, t.lap_ms());
-			fflush(lfp);
-			fclose(lfp);
-			time_count++;
+	for (int wh = 1; wh < 11; wh++) {
+		ermia::scoped_str_arena s_arena(arena);
+		// [HYU] for vicious cycle
+		static thread_local tpcc_table_scanner s_scanner(&arena);
+		s_scanner.clear();
+		const stock::key k_s_0(wh, 0);
+		const stock::key k_s_1(wh, std::numeric_limits<int32_t>::max());
+		TryCatch(tbl_stock(wh)->Scan(txn, Encode(str(Size(k_s_0)), k_s_0),
+																	&Encode(str(Size(k_s_1)), k_s_1), s_scanner,
+																	s_arena.get()));
 
-			//std::cerr << "[" << time_count << "] Q2 end_latency_ms: " << std::endl;
+		for (int d = 1; d <= 10; d++) {
+			static thread_local tpcc_table_scanner c_scanner(&arena);
+			c_scanner.clear();
+			const customer::key k_c_0(wh, d, 0);
+			const customer::key k_c_1(wh, d, std::numeric_limits<int32_t>::max());
+			TryCatch(tbl_customer(wh)->Scan(txn, Encode(str(Size(k_c_0)), k_c_0),
+																		&Encode(str(Size(k_c_1)), k_c_1), c_scanner,
+																		s_arena.get()));
+
 		}
+	}
+
+	after = t2.lap_ms();
+
+	gettimeofday(&end_tv, 0);
+
+	if (end_tv.tv_sec - start_latency_time >= 1) {
+		time_count += end_tv.tv_sec - start_latency_time;
+		start_latency_time = end_tv.tv_sec;
+
+		fprintf(lfp, "%d, %lf\n", time_count, after - before);
+		fflush(lfp);
+		//time_count++;
+		//std::cerr << "[" << time_count << "] Q2 end_latency_ms: " << std::endl;
+	}
+
+	fclose(lfp);
 
 #else /* HYU_MOTIVATION */
 // query2

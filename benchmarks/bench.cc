@@ -123,7 +123,7 @@ void bench_worker::MyWork(char *) {
 				//if (start_flag == false) {
 #ifdef HYU_MOTIVATION /* HYU_MOTIVATION */
 				if (--Q2_count >= 0) {
-					//do_workload_function(5);
+					do_workload_function(5);
 					//start_flag = true;
 				}
 #endif /* HYU_MOTIVATION */
@@ -131,6 +131,21 @@ void bench_worker::MyWork(char *) {
 			}
 
 #ifdef HYU_EVAL_2 /* HYU_EVAL_2 */
+#ifdef HYU_CHAIN_INFO /* HYU_CHAIN_INFO */
+			if (!start_flag) {
+				for (int i = 0; i < 10; i++) {
+					// create version chain
+					do_workload_function(2);
+					// end
+					
+					// scan
+					do_workload_function(1);
+					// end
+				}
+				start_flag = true;
+			}
+			continue;
+#else /* HYU_CHAIN_INFO */
 			if (!start_flag) {
 				// create version chain
 				do_workload_function(2);
@@ -142,6 +157,7 @@ void bench_worker::MyWork(char *) {
 				start_flag = true;
 			}
 			continue;
+#endif /* HYU_CHAIN_INFO */
 #endif /* HYU_EVAL_2 */
 
       double d = r.next_uniform();

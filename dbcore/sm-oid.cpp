@@ -1262,16 +1262,16 @@ start_over:
   fat_ptr ptr = volatile_read(*entry);
   ASSERT(ptr.asi_type() == 0);
   Object *prev_obj = nullptr;
-	uint64_t next_gced_cnt = 0;
-	uint64_t next_vi_cnt = 0;
-	uint64_t next_null_cnt = 0;
-	uint64_t total_next_cnt = 0;
-	uint64_t highway_cnt = 0;
-	int cur_level = 0;
+	//uint64_t next_gced_cnt = 0;
+	//uint64_t next_vi_cnt = 0;
+	//uint64_t next_null_cnt = 0;
+	//uint64_t total_next_cnt = 0;
+	//uint64_t highway_cnt = 0;
+	//int cur_level = 0;
 	//printf("start count!\n");
-	FILE* fp_cnt = fopen("chain_count.data", "a+");
-	fprintf(fp_cnt, "timestamp: %lu\n", visitor_xc->begin);
-	fflush(fp_cnt);
+	//FILE* fp_cnt = fopen("chain_count.data", "a+");
+	//fprintf(fp_cnt, "timestamp: %lu\n", visitor_xc->begin);
+	//fflush(fp_cnt);
   while (ptr.offset()) {
     Object *cur_obj = nullptr;
 		Object *highway_obj = nullptr;
@@ -1304,9 +1304,9 @@ start_over:
 			tentative_highway = cur_obj->GetHighway();
       ASSERT(tentative_next.asi_type() == 0);
 			ASSERT(tentative_highway.asi_type() == 0);
-			cur_level = cur_obj->GetLevel();
-			fprintf(fp_cnt, "lev: %d\n", cur_level);
-			fflush(fp_cnt);
+			//cur_level = cur_obj->GetLevel();
+			//fprintf(fp_cnt, "lev: %d\n", cur_level);
+			//fflush(fp_cnt);
     }
 
     bool retry = false;
@@ -1315,11 +1315,11 @@ start_over:
       goto start_over;
     }
     if (visible) {
-			total_next_cnt = next_null_cnt + next_gced_cnt + next_vi_cnt;
-			printf("next_null_cnt: %lu, next_gced_cnt: %lu, next_vi_cnt: %lu, total_next_cnt: %lu, highway_cnt: %lu\n", next_null_cnt, next_gced_cnt, next_vi_cnt, total_next_cnt, highway_cnt);
-			//fprintf(fp_cnt, "next_null_cnt: %lu, next_gced_cnt: %lu, next_vi_cnt: %lu, total_next_cnt: %lu, highway_cnt: %lu\n", next_null_cnt, next_gced_cnt, next_vi_cnt, total_next_cnt, highway_cnt);
+			//total_next_cnt = next_null_cnt + next_gced_cnt + next_vi_cnt;
+			//printf(fp_cnt, "next_null_cnt: %lu, next_gced_cnt: %lu, next_vi_cnt: %lu, total_next_cnt: %lu, highway_cnt: %lu\n", next_null_cnt, next_gced_cnt, next_vi_cnt, total_next_cnt, highway_cnt);
+			//fprintf(fp_cnt, " %lu\n", total_next_cnt + highway_cnt);
 			//fflush(fp_cnt);
-			fclose(fp_cnt);
+			//fclose(fp_cnt);
       return cur_obj->GetPinnedTuple();
     } else {
 			highway_obj = (Object *)tentative_highway.offset();
@@ -1327,7 +1327,7 @@ start_over:
 			if (highway_obj == NULL) {
 				ptr = tentative_next;
 				prev_obj = cur_obj;
-				next_null_cnt++;
+				//next_null_cnt++;
 				continue;
 			}
 
@@ -1337,7 +1337,7 @@ start_over:
 					LSN::from_ptr(hw_clsn).offset() > LSN::from_ptr(cur_obj->GetClsn()).offset()) {
 				ptr = tentative_next;
 				prev_obj = cur_obj;
-				next_gced_cnt++;
+				//next_gced_cnt++;
 				continue;
 			}
 
@@ -1346,20 +1346,20 @@ start_over:
 
 			if (highway_retry || highway_visible) {
 				ptr = tentative_next;
-				next_vi_cnt++;
+				//next_vi_cnt++;
 			} else {
-				highway_cnt++;
+				//highway_cnt++;
 				ptr = tentative_highway;
 			}
 			prev_obj = cur_obj;
 		}
   }
 
-	total_next_cnt = next_null_cnt + next_gced_cnt + next_vi_cnt;
-	printf("next_null_cnt: %lu, next_gced_cnt: %lu, next_vi_cnt: %lu, total_next_cnt: %lu, highway_cnt: %lu at the end\n", next_null_cnt, next_gced_cnt, next_vi_cnt, total_next_cnt, highway_cnt);
+	//total_next_cnt = next_null_cnt + next_gced_cnt + next_vi_cnt;
 	//fprintf(fp_cnt, "next_null_cnt: %lu, next_gced_cnt: %lu, next_vi_cnt: %lu, total_next_cnt: %lu, highway_cnt: %lu at the end\n", next_null_cnt, next_gced_cnt, next_vi_cnt, total_next_cnt, highway_cnt);
+	//fprintf(fp_cnt, " %lu\n", total_next_cnt + highway_cnt);
 	//fflush(fp_cnt);
-	fclose(fp_cnt);
+	//fclose(fp_cnt);
   return nullptr;  // No Visible records
 }
 #endif /* HYU_EVAL_2 */

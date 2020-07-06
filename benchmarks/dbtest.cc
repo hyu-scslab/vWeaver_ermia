@@ -413,6 +413,15 @@ int main(int argc, char **argv) {
 #ifdef HYU_MOTIVATION /* HYU_MOTIVATION */
 		std::cerr << "  HYU_MOTIVATION  " << std::endl;
 #endif /* HYU_MOTIVATION */
+#ifdef HYU_EVAL /* HYU_EVAL */
+		std::cerr << "  HYU EVAL  " << std::endl;
+#endif /* HYU_EVAL */
+#ifdef HYU_EVAL_2 /* HYU_EVAL_2 */
+		std::cerr << "  HYU EVAL 2  " << std::endl;
+#endif /* HYU_EVAL_2 */
+#ifdef HYU_CHAIN_INFO /* HYU_CHAIN_INFO */
+		std::cerr << "  HYU CHAIN INFO  " << std::endl;
+#endif /* HYU_CHAIN_INFO */
   }
 
   ermia::MM::prepare_node_memory();

@@ -295,6 +295,7 @@ void *allocate_onnode(size_t size) {
   auto node = numa_node_of_cpu(sched_getcpu());
   ALWAYS_ASSERT(node < config::numa_nodes);
   auto offset = __sync_fetch_and_add(&allocated_node_memory[node], size);
+	//printf("[HYU] memory usage: %lu\n", allocated_node_memory[node]);
   if (likely(offset + size <= config::node_memory_gb * config::GB)) {
     return node_memory[node] + offset;
   }

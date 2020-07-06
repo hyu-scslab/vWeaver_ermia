@@ -17,6 +17,7 @@
 #include <dirent.h>
 #include <sys/stat.h>
 #include <cerrno>
+#include <assert.h>
 
 namespace ermia {
 
@@ -232,9 +233,11 @@ struct LSN {
   };
 
   static LSN from_ptr(fat_ptr const &p) {
-    THROW_IF(
+    /*THROW_IF(
         p.asi_type() != fat_ptr::ASI_LOG and p.asi_type() != fat_ptr::ASI_EXT,
-        illegal_argument, "Attempt to convert non-LSN fat_ptr to LSN");
+        illegal_argument, "Attempt to convert non-LSN fat_ptr to LSN");*/
+
+		ASSERT(p.asi_type() == fat_ptr::ASI_LOG || p.asi_type() == fat_ptr::ASI_EXT);
 
     return LSN::make(p.offset(), p.asi_segment());
   }

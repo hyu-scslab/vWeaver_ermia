@@ -139,6 +139,17 @@ void bench_worker::MyWork(char *) {
 				// scan
 				do_workload_function(1);
 				// end
+#ifdef HYU_LONG_CHAIN /* HYU_LONG_CHAIN */
+				// create version chain
+				do_workload_function(2);
+				do_workload_function(2);
+				do_workload_function(2);
+				// end
+				
+				// scan
+				do_workload_function(1);
+				// end
+#endif /* HYU_LONG_CHAIN */
 				start_flag = true;
 			}
 			continue;

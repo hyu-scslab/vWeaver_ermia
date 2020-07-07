@@ -1640,103 +1640,14 @@ uint64_t zipfian(double alpha, uint64_t n)
 // function for create version chain
 rc_t tpcc_worker::txn_delivery() {
 	uint64_t count = 0;
-	uint64_t zipf_count[10000];
-	uint64_t zipf_mid_count[10000];
+	static uint64_t proceed = 0;
+	static uint64_t zipf_count[10000];
+	static uint64_t zipf_mid_count[10000];
 	for (int i = 0; i < 10000; i++) {
 		zipf_count[i] = 0;
 		zipf_mid_count[i] = 0;
 	}
 
-#ifdef HYU_LONG_CHAIN /* HYU_LONG_CHAIN */
-	while(count < 200000) {
-		if (count % 100 == 0) {
-			printf("\r proceeding.... %d / 2000", count / 100);
-		}
-		for (int i = 1; i <= 30000; i++) {
-			ermia::transaction *txn = db->NewTransaction(0, arena, txn_buf());
-			if (!first) {
-				first_begin = txn->xc->begin;
-				first = true;
-				printf("first!\n");
-			}
-
-			ermia::scoped_str_arena s_arena(arena);
-			ermia::varstr valptr;
-
-			rc_t rc = rc_t{RC_INVALID};
-			if (i >= 1 && i <= 10000) {
-				const stock::key k_s(1, i);
-				stock::value v_s_temp;
-
-				rc = rc_t{RC_INVALID};
-				tbl_stock(1)->Get(txn, rc, Encode(str(Size(k_s)), k_s), valptr);
-				TryVerifyRelaxed(rc);
-
-				const stock::value *v_s = Decode(valptr, v_s_temp);
-
-				stock::value v_s_new(*v_s);
-
-				TryCatch(tbl_stock(1)
-											->Put(txn, Encode(str(Size(k_s)), k_s),
-														Encode(str(Size(v_s_new)), v_s_new)));
-			} else if (i >= 10001 && i <= 20000) {
-				uint64_t zipf_idx = zipfian_mid(0.4, 10000);
-				uint64_t zipf_val = zipf_idx + 10000;
-				zipf_mid_count[zipf_idx]++;
-				const stock::key k_s(1, zipf_val);
-				stock::value v_s_temp;
-
-				rc = rc_t{RC_INVALID};
-				tbl_stock(1)->Get(txn, rc, Encode(str(Size(k_s)), k_s), valptr);
-				TryVerifyRelaxed(rc);
-
-				const stock::value *v_s = Decode(valptr, v_s_temp);
-
-				stock::value v_s_new(*v_s);
-
-				TryCatch(tbl_stock(1)
-											->Put(txn, Encode(str(Size(k_s)), k_s),
-														Encode(str(Size(v_s_new)), v_s_new)));
-			} else if (i >= 20001 && i <= 30000) {
-				uint64_t zipf_idx = zipfian(1.4, 10000);
-				uint64_t zipf_val = zipf_idx + 20000;
-				zipf_count[zipf_idx]++;
-				const stock::key k_s(1, zipf_val);
-				stock::value v_s_temp;
-
-				rc = rc_t{RC_INVALID};
-				tbl_stock(1)->Get(txn, rc, Encode(str(Size(k_s)), k_s), valptr);
-				TryVerifyRelaxed(rc);
-
-				const stock::value *v_s = Decode(valptr, v_s_temp);
-
-				stock::value v_s_new(*v_s);
-
-				TryCatch(tbl_stock(1)
-											->Put(txn, Encode(str(Size(k_s)), k_s),
-														Encode(str(Size(v_s_new)), v_s_new)));
-			}
-
-			TryCatch(db->Commit(txn));
-			if (ermia::config::command_log && !ermia::config::is_backup_srv()) {
-				ermia::CommandLog::cmd_log->Insert(1, TPCC_CLID_DELIVERY);
-			}
-		}
-		count++;
-		if (count == 50000) {
-			FILE* fp = fopen("zipf_count.data", "w+");
-			FILE* mid_fp = fopen("zipf_mid_count.data", "w+");
-			for (int i = 0; i < 10000; i++) {
-				fprintf(mid_fp, "zipf_count[%d]: %lu\n", i, zipf_mid_count[i]);
-				fflush(mid_fp);
-				fprintf(fp, "zipf_count[%d]: %lu\n", i, zipf_count[i]);
-				fflush(fp);
-			}
-			fclose(mid_fp);
-			fclose(fp);
-		}
-	}
-#else /* HYU_LONG_CHAIN */
 	while(count < 50000) {
 		if (count % 100 == 0) {
 			printf("\r proceeding.... %d / 500", count / 100);
@@ -1812,7 +1723,12 @@ rc_t tpcc_worker::txn_delivery() {
 			}
 		}
 		count++;
-		if (count == 50000) {
+		proceed++;
+#ifdef HYU_LONG_CHAIN /* HYU_LONG_CHAIN */
+		if (proceed == 200000) {
+#else /* HYU_LONG_CHAIN */
+		if (proceed == 50000) {
+#endif /* HYU_LONG_CHAIN */
 			FILE* fp = fopen("zipf_count.data", "w+");
 			FILE* mid_fp = fopen("zipf_mid_count.data", "w+");
 			for (int i = 0; i < 10000; i++) {
@@ -1825,7 +1741,6 @@ rc_t tpcc_worker::txn_delivery() {
 			fclose(fp);
 		}
 	}
-#endif /* HYU_LONG_CHAIN */
 	printf("\nfinish create version chain\n");
   return {RC_TRUE};
 }
@@ -2130,6 +2045,7 @@ rc_t tpcc_worker::txn_payment() {
 		printf("timepoint %d: %lu\n", i, timepoint[i - 1]);
 	}
 
+#ifndef HYU_LONG_CHAIN /* HYU_LONG_CHAIN */
 	printf("start vanilla uniform scan evaluation\n");
 
 	// 1. vanilla case
@@ -2308,6 +2224,7 @@ rc_t tpcc_worker::txn_payment() {
 			vridgy_high_skew[i][j - 1] = t.lap_ms();
 		}
 	}
+#endif /* HYU_LONG_CHAIN */
 
 	printf("start vweaver zipfian 1.4 scan evaluation\n");
 	// 3. vweaver case
@@ -2331,6 +2248,7 @@ rc_t tpcc_worker::txn_payment() {
 		}
 	}
 
+#ifndef HYU_LONG_CHAIN /* HYU_LONG_CHAIN */
 	FILE* fp_vanilla_uniform = fopen("vanilla_uniform_latency.data", "w+");
 	FILE* fp_vanilla_mid_skew = fopen("vanilla_mid_skew_latency.data", "w+");
 	FILE* fp_vanilla_high_skew = fopen("vanilla_high_skew_latency.data", "w+");
@@ -2339,10 +2257,12 @@ rc_t tpcc_worker::txn_payment() {
 	FILE* fp_vridgy_high_skew = fopen("vridgy_high_skew_latency.data", "w+");
 	FILE* fp_vweaver_uniform = fopen("vweaver_uniform_latency.data", "w+");
 	FILE* fp_vweaver_mid_skew = fopen("vweaver_mid_skew_latency.data", "w+");
+#endif /* HYU_LONG_CHAIN */
 	FILE* fp_vweaver_high_skew = fopen("vweaver_high_skew_latency.data", "w+");
 
 	for (int i = TIME_PARTITION - 1; i >= 0; i--) {
 		for (int j = 0; j < RANGE_PARTITION; j++) {
+#ifndef HYU_LONG_CHAIN /* HYU_LONG_CHAIN */
 			fprintf(fp_vanilla_uniform, "%d, %d, %lf\n", 10-i, j+1,
 								vanilla_uniform[i][j]);
 			fflush(fp_vanilla_uniform);
@@ -2369,10 +2289,12 @@ rc_t tpcc_worker::txn_payment() {
 			fprintf(fp_vridgy_high_skew, "%d, %d, %lf\n", 10-i, j+1,
 								vridgy_high_skew[i][j]);
 			fflush(fp_vridgy_high_skew);
+#endif /* HYU_LONG_CHAIN */
 			fprintf(fp_vweaver_high_skew, "%d, %d, %lf\n", 10-i, j+1,
 								vweaver_high_skew[i][j]);
 			fflush(fp_vweaver_high_skew);
 		}
+#ifndef HYU_LONG_CHAIN /* HYU_LONG_CHAIN */
 		fprintf(fp_vanilla_uniform, "\n");
 		fflush(fp_vanilla_uniform);
 		fprintf(fp_vridgy_uniform, "\n");
@@ -2391,9 +2313,11 @@ rc_t tpcc_worker::txn_payment() {
 		fflush(fp_vanilla_high_skew);
 		fprintf(fp_vridgy_high_skew, "\n");
 		fflush(fp_vridgy_high_skew);
+#endif /* HYU_LONG_CHAIN */
 		fprintf(fp_vweaver_high_skew, "\n");
 		fflush(fp_vweaver_high_skew);
 	}
+#ifndef HYU_LONG_CHAIN /* HYU_LONG_CHAIN */
 	fclose(fp_vanilla_uniform);
 	fclose(fp_vridgy_uniform);
 	fclose(fp_vweaver_uniform);
@@ -2402,6 +2326,7 @@ rc_t tpcc_worker::txn_payment() {
 	fclose(fp_vweaver_mid_skew);
 	fclose(fp_vanilla_high_skew);
 	fclose(fp_vridgy_high_skew);
+#endif /* HYU_LONG_CHAIN */
 	fclose(fp_vweaver_high_skew);
 
 

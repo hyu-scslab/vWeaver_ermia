@@ -419,9 +419,9 @@ int main(int argc, char **argv) {
 #ifdef HYU_EVAL_2 /* HYU_EVAL_2 */
 		std::cerr << "  HYU EVAL 2  " << std::endl;
 #endif /* HYU_EVAL_2 */
-#ifdef HYU_CHAIN_INFO /* HYU_CHAIN_INFO */
-		std::cerr << "  HYU CHAIN INFO  " << std::endl;
-#endif /* HYU_CHAIN_INFO */
+#ifdef HYU_LONG_CHAIN /* HYU_LONG_CHAIN */
+		std::cerr << "  HYU LONG CHAIN  " << std::endl;
+#endif /* HYU_LONG_CHAIN */
   }
 
   ermia::MM::prepare_node_memory();

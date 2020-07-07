@@ -1647,17 +1647,17 @@ rc_t tpcc_worker::txn_delivery() {
 		zipf_mid_count[i] = 0;
 	}
 
-#ifdef HYU_CHAIN_INFO /* HYU_CHAIN_INFO*/
-	while(count < 600000000) {
-		for (int i = 1; i <= 1; i++) {
-#else /* HYU_CHAIN_INFO */
+#ifdef HYU_LONG_CHAIN /* HYU_LONG_CHAIN */
 	while(count < 200000) {
+		if (count % 100 == 0) {
+			printf("\r proceeding.... %d / 2000", count / 100);
+		}
 		for (int i = 1; i <= 30000; i++) {
-#endif /* HYU_CHAIN_INFO */
 			ermia::transaction *txn = db->NewTransaction(0, arena, txn_buf());
 			if (!first) {
 				first_begin = txn->xc->begin;
 				first = true;
+				printf("first!\n");
 			}
 
 			ermia::scoped_str_arena s_arena(arena);
@@ -1717,15 +1717,13 @@ rc_t tpcc_worker::txn_delivery() {
 														Encode(str(Size(v_s_new)), v_s_new)));
 			}
 
-
 			TryCatch(db->Commit(txn));
 			if (ermia::config::command_log && !ermia::config::is_backup_srv()) {
 				ermia::CommandLog::cmd_log->Insert(1, TPCC_CLID_DELIVERY);
 			}
 		}
 		count++;
-#ifndef HYU_CHAIN_INFO /* HYU_CHAIN_INFO */
-		if (count == 200000) {
+		if (count == 50000) {
 			FILE* fp = fopen("zipf_count.data", "w+");
 			FILE* mid_fp = fopen("zipf_mid_count.data", "w+");
 			for (int i = 0; i < 10000; i++) {
@@ -1737,9 +1735,98 @@ rc_t tpcc_worker::txn_delivery() {
 			fclose(mid_fp);
 			fclose(fp);
 		}
-#endif /* HYU_CHAIN_INFO */
 	}
-	printf("finish create version chain\n");
+#else /* HYU_LONG_CHAIN */
+	while(count < 50000) {
+		if (count % 100 == 0) {
+			printf("\r proceeding.... %d / 500", count / 100);
+		}
+		for (int i = 1; i <= 30000; i++) {
+			ermia::transaction *txn = db->NewTransaction(0, arena, txn_buf());
+			if (!first) {
+				first_begin = txn->xc->begin;
+				first = true;
+				printf("first!\n");
+			}
+
+			ermia::scoped_str_arena s_arena(arena);
+			ermia::varstr valptr;
+
+			rc_t rc = rc_t{RC_INVALID};
+			if (i >= 1 && i <= 10000) {
+				const stock::key k_s(1, i);
+				stock::value v_s_temp;
+
+				rc = rc_t{RC_INVALID};
+				tbl_stock(1)->Get(txn, rc, Encode(str(Size(k_s)), k_s), valptr);
+				TryVerifyRelaxed(rc);
+
+				const stock::value *v_s = Decode(valptr, v_s_temp);
+
+				stock::value v_s_new(*v_s);
+
+				TryCatch(tbl_stock(1)
+											->Put(txn, Encode(str(Size(k_s)), k_s),
+														Encode(str(Size(v_s_new)), v_s_new)));
+			} else if (i >= 10001 && i <= 20000) {
+				uint64_t zipf_idx = zipfian_mid(0.4, 10000);
+				uint64_t zipf_val = zipf_idx + 10000;
+				zipf_mid_count[zipf_idx]++;
+				const stock::key k_s(1, zipf_val);
+				stock::value v_s_temp;
+
+				rc = rc_t{RC_INVALID};
+				tbl_stock(1)->Get(txn, rc, Encode(str(Size(k_s)), k_s), valptr);
+				TryVerifyRelaxed(rc);
+
+				const stock::value *v_s = Decode(valptr, v_s_temp);
+
+				stock::value v_s_new(*v_s);
+
+				TryCatch(tbl_stock(1)
+											->Put(txn, Encode(str(Size(k_s)), k_s),
+														Encode(str(Size(v_s_new)), v_s_new)));
+			} else if (i >= 20001 && i <= 30000) {
+				uint64_t zipf_idx = zipfian(1.4, 10000);
+				uint64_t zipf_val = zipf_idx + 20000;
+				zipf_count[zipf_idx]++;
+				const stock::key k_s(1, zipf_val);
+				stock::value v_s_temp;
+
+				rc = rc_t{RC_INVALID};
+				tbl_stock(1)->Get(txn, rc, Encode(str(Size(k_s)), k_s), valptr);
+				TryVerifyRelaxed(rc);
+
+				const stock::value *v_s = Decode(valptr, v_s_temp);
+
+				stock::value v_s_new(*v_s);
+
+				TryCatch(tbl_stock(1)
+											->Put(txn, Encode(str(Size(k_s)), k_s),
+														Encode(str(Size(v_s_new)), v_s_new)));
+			}
+
+			TryCatch(db->Commit(txn));
+			if (ermia::config::command_log && !ermia::config::is_backup_srv()) {
+				ermia::CommandLog::cmd_log->Insert(1, TPCC_CLID_DELIVERY);
+			}
+		}
+		count++;
+		if (count == 50000) {
+			FILE* fp = fopen("zipf_count.data", "w+");
+			FILE* mid_fp = fopen("zipf_mid_count.data", "w+");
+			for (int i = 0; i < 10000; i++) {
+				fprintf(mid_fp, "zipf_count[%d]: %lu\n", i, zipf_mid_count[i]);
+				fflush(mid_fp);
+				fprintf(fp, "zipf_count[%d]: %lu\n", i, zipf_count[i]);
+				fflush(fp);
+			}
+			fclose(mid_fp);
+			fclose(fp);
+		}
+	}
+#endif /* HYU_LONG_CHAIN */
+	printf("\nfinish create version chain\n");
   return {RC_TRUE};
 }
 #else /* HYU_EVAL_2 */
@@ -2035,62 +2122,12 @@ rc_t tpcc_worker::txn_payment() {
 	double vweaver_uniform[TIME_PARTITION][RANGE_PARTITION];
 	double vweaver_mid_skew[TIME_PARTITION][RANGE_PARTITION];
 	double vweaver_high_skew[TIME_PARTITION][RANGE_PARTITION];
-	
+
 	uint64_t timepoint[TIME_PARTITION];
 	uint64_t interval = (txn->xc->begin - first_begin) / TIME_PARTITION;
 	for (int i = 1; i <= TIME_PARTITION; i++) {
 		timepoint[i - 1] = interval * i + first_begin;
 		printf("timepoint %d: %lu\n", i, timepoint[i - 1]);
-	}
-
-	printf("start warmup\n");
-
-	// warm up
-	txn->xc->begin = timepoint[0];
-	// latency evaluation per scan range
-	{
-#ifdef HYU_CHAIN_INFO /* HYU_CHAIN_INFO */
-	static int count = 1;
-	const stock::key k_s_0(1, 1);
-	const stock::key k_s_1(1, 10000);
-	ermia::varstr valptr;
-	rc_t rc_1 = rc_t{RC_INVALID};
-	rc_t rc_2 = rc_t{RC_INVALID};
-	//printf("start warmup\n");
-	printf("start chain stack evaluation\n");
-	//util::timer ti;
-	for (int i = TIME_PARTITION - 1; i >= 0; i--){
-		double result;
-		ermia::scoped_str_arena s_arena_0(arena);
-		static thread_local tpcc_table_scanner s_scanner_0(&arena);
-		s_scanner_0.clear();
-
-		txn->xc->begin = timepoint[i];
-		//printf("begin timestamp: %lu\n", txn->xc->begin);
-		TryCatch(tbl_stock(1)->Scan_eval(txn, Encode(str(Size(k_s_0)), k_s_0),
-																	&Encode(str(Size(k_s_1)), k_s_1), s_scanner_0,
-																	s_arena_0.get(), SCAN_VWEAVER));
-		s_scanner_0.clear();
-		FILE* chain_fp = fopen("chain_count.data", "a+");
-		util::timer ti_vr;
-		TryCatch(tbl_stock(1)->Scan_eval(txn, Encode(str(Size(k_s_0)), k_s_0),
-																	&Encode(str(Size(k_s_1)), k_s_1), s_scanner_0,
-																	s_arena_0.get(), SCAN_VWEAVER));
-		//tbl_stock(1)->Get_eval(txn, rc_1, Encode(str(Size(k_s_0)), k_s_0), valptr, 1);
-		//printf("%d vridgy: %lf\n", i, ti_vr.lap_ms());
-		result = ti_vr.lap_ms();	
-		fprintf(chain_fp, "%d, %d, %lf\n", 10-i, count, result);
-		fflush(chain_fp);
-		fclose(chain_fp);
-		//util::timer ti_va;
-		//tbl_stock(1)->Get_eval(txn, rc_2, Encode(str(Size(k_s_0)), k_s_0), valptr, 0);
-		//printf("%d vanilla: %lf\n", i, ti_va.lap_ms());
-	}
-	count++;
-  TryCatch(db->Commit(txn));
-	printf("latency breakdown evaluation end\n");
-  return {RC_TRUE};
-#endif /* HYU_CHAIN_INFO */
 	}
 
 	printf("start vanilla uniform scan evaluation\n");
@@ -2113,7 +2150,6 @@ rc_t tpcc_worker::txn_payment() {
 																		&Encode(str(Size(k_s_3)), k_s_3), s_scanner_1,
 																		s_arena_1.get(), SCAN_VANILLA));
 			vanilla_uniform[i][j - 1] = t.lap_ms();
-			//fprintf(lfp_vanilla, "%d, %d, %lf\n", i + 1, j, t.lap_ms());
 		}
 	}
 
@@ -2136,7 +2172,6 @@ rc_t tpcc_worker::txn_payment() {
 																		&Encode(str(Size(k_s_5)), k_s_5), s_scanner_2,
 																		s_arena_2.get(), SCAN_VRIDGY));
 			vridgy_uniform[i][j - 1] = t.lap_ms();
-			//fprintf(lfp_vridgy, "%d, %d, %lf\n", i + 1, j, t.lap_ms());
 		}
 	}
 
@@ -2159,7 +2194,6 @@ rc_t tpcc_worker::txn_payment() {
 																		&Encode(str(Size(k_s_7)), k_s_7), s_scanner_3,
 																		s_arena_3.get(), SCAN_VWEAVER));
 			vweaver_uniform[i][j - 1] = t.lap_ms();
-			//fprintf(lfp_vweaver, "%d, %d, %lf\n", i + 1, j, t.lap_ms());
 		}
 	}
 
@@ -2183,7 +2217,6 @@ rc_t tpcc_worker::txn_payment() {
 																		&Encode(str(Size(k_s_9)), k_s_9), s_scanner_4,
 																		s_arena_4.get(), SCAN_VANILLA));
 			vanilla_mid_skew[i][j - 1] = t.lap_ms();
-			//fprintf(lfp_vanilla, "%d, %d, %lf\n", i + 1, j, t.lap_ms());
 		}
 	}
 
@@ -2206,7 +2239,6 @@ rc_t tpcc_worker::txn_payment() {
 																		&Encode(str(Size(k_s_11)), k_s_11), s_scanner_5,
 																		s_arena_5.get(), SCAN_VRIDGY));
 			vridgy_mid_skew[i][j - 1] = t.lap_ms();
-			//fprintf(lfp_vridgy, "%d, %d, %lf\n", i + 1, j, t.lap_ms());
 		}
 	}
 
@@ -2229,24 +2261,8 @@ rc_t tpcc_worker::txn_payment() {
 																		&Encode(str(Size(k_s_13)), k_s_13), s_scanner_6,
 																		s_arena_6.get(), SCAN_VWEAVER));
 			vweaver_mid_skew[i][j - 1] = t.lap_ms();
-			//fprintf(lfp_vweaver, "%d, %d, %lf\n", i + 1, j, t.lap_ms());
 		}
 	}
-
-
-
-	/*ermia::scoped_str_arena s_arena_8(arena);
-
-	static thread_local tpcc_table_scanner s_scanner_8(&arena);
-	s_scanner_8.clear();
-	const stock::key k_s_t3(1, 10001);
-	const stock::key k_s_t4(1, RANGE_PARTITION * RANGE_IN_STOCK + 10000);
-	printf("start warmup\n");
-	TryCatch(tbl_stock(1)->Scan_eval(txn, Encode(str(Size(k_s_t3)), k_s_t3),
-																&Encode(str(Size(k_s_t4)), k_s_t4), s_scanner_8,
-																s_arena_8.get(), SCAN_VANILLA));*/
-
-	printf("end warmup\n");
 
 	printf("start vanilla zipfian 1.4 scan evaluation\n");
 
@@ -2268,7 +2284,6 @@ rc_t tpcc_worker::txn_payment() {
 																		&Encode(str(Size(k_s_15)), k_s_15), s_scanner_9,
 																		s_arena_9.get(), SCAN_VANILLA));
 			vanilla_high_skew[i][j - 1] = t.lap_ms();
-			//fprintf(lfp_vanilla, "%d, %d, %lf\n", i + 1, j, t.lap_ms());
 		}
 	}
 
@@ -2291,7 +2306,6 @@ rc_t tpcc_worker::txn_payment() {
 																		&Encode(str(Size(k_s_17)), k_s_17), s_scanner_10,
 																		s_arena_10.get(), SCAN_VRIDGY));
 			vridgy_high_skew[i][j - 1] = t.lap_ms();
-			//fprintf(lfp_vridgy, "%d, %d, %lf\n", i + 1, j, t.lap_ms());
 		}
 	}
 
@@ -2314,7 +2328,6 @@ rc_t tpcc_worker::txn_payment() {
 																		&Encode(str(Size(k_s_19)), k_s_19), s_scanner_11,
 																		s_arena_11.get(), SCAN_VWEAVER));
 			vweaver_high_skew[i][j - 1] = t.lap_ms();
-			//fprintf(lfp_vweaver, "%d, %d, %lf\n", i + 1, j, t.lap_ms());
 		}
 	}
 
@@ -2342,6 +2355,7 @@ rc_t tpcc_worker::txn_payment() {
 			
 			fprintf(fp_vanilla_mid_skew, "%d, %d, %lf\n", 10-i, j+1,
 								vanilla_mid_skew[i][j]);
+			fflush(fp_vanilla_mid_skew);
 			fprintf(fp_vridgy_mid_skew, "%d, %d, %lf\n", 10-i, j+1,
 								vridgy_mid_skew[i][j]);
 			fflush(fp_vridgy_mid_skew);
@@ -2351,25 +2365,34 @@ rc_t tpcc_worker::txn_payment() {
 
 			fprintf(fp_vanilla_high_skew, "%d, %d, %lf\n", 10-i, j+1,
 								vanilla_high_skew[i][j]);
+			fflush(fp_vanilla_high_skew);
 			fprintf(fp_vridgy_high_skew, "%d, %d, %lf\n", 10-i, j+1,
 								vridgy_high_skew[i][j]);
 			fflush(fp_vridgy_high_skew);
 			fprintf(fp_vweaver_high_skew, "%d, %d, %lf\n", 10-i, j+1,
 								vweaver_high_skew[i][j]);
 			fflush(fp_vweaver_high_skew);
-			/*fprintf(fp_vridgy_uniform, "%d, %d, %lf\n", 10-i, j+1,
-								vanilla_uniform[i][j] / vridgy_uniform[i][j]);
-			fflush(fp_vridgy_uniform);
-			fprintf(fp_vweaver_uniform, "%d, %d, %lf\n", 10-i, j+1,
-								vanilla_uniform[i][j] / vweaver_uniform[i][j]);
-			fflush(fp_vweaver_uniform);
-						fprintf(fp_vridgy_high_skew, "%d, %d, %lf\n", 10-i, j+1,
-								vanilla_high_skew[i][j] / vridgy_high_skew[i][j]);
-			fflush(fp_vridgy_high_skew);
-			fprintf(fp_vweaver_high_skew, "%d, %d, %lf\n", 10-i, j+1,
-								vanilla_high_skew[i][j] / vweaver_high_skew[i][j]);
-			fflush(fp_vweaver_high_skew);*/
 		}
+		fprintf(fp_vanilla_uniform, "\n");
+		fflush(fp_vanilla_uniform);
+		fprintf(fp_vridgy_uniform, "\n");
+		fflush(fp_vridgy_uniform);
+		fprintf(fp_vweaver_uniform, "\n");
+		fflush(fp_vweaver_uniform);
+		
+		fprintf(fp_vanilla_mid_skew, "\n");
+		fflush(fp_vanilla_mid_skew);
+		fprintf(fp_vridgy_mid_skew, "\n");
+		fflush(fp_vridgy_mid_skew);
+		fprintf(fp_vweaver_mid_skew, "\n");
+		fflush(fp_vweaver_mid_skew);
+
+		fprintf(fp_vanilla_high_skew, "\n");
+		fflush(fp_vanilla_high_skew);
+		fprintf(fp_vridgy_high_skew, "\n");
+		fflush(fp_vridgy_high_skew);
+		fprintf(fp_vweaver_high_skew, "\n");
+		fflush(fp_vweaver_high_skew);
 	}
 	fclose(fp_vanilla_uniform);
 	fclose(fp_vridgy_uniform);

@@ -5,7 +5,6 @@
 #include "../dbcore/sm-log-recover-impl.h"
 
 namespace ermia {
-
 class Engine {
 private:
   void CreateTable(uint16_t index_type, const char *name,

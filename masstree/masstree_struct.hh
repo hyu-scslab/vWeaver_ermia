@@ -16,23 +16,23 @@
 #ifndef MASSTREE_STRUCT_HH
 #define MASSTREE_STRUCT_HH
 #include "masstree.hh"
+#include "mtcounters.hh"
 #include "nodeversion.hh"
 #include "stringbag.hh"
-#include "mtcounters.hh"
 #include "timestamp.hh"
 namespace Masstree {
 
 template <typename P>
 struct make_nodeversion {
   typedef typename std::conditional<P::concurrent, nodeversion,
-                                     singlethreaded_nodeversion>::type type;
+                                    singlethreaded_nodeversion>::type type;
 };
 
 template <typename P>
 struct make_prefetcher {
   typedef typename std::conditional<P::prefetch,
-                                     value_prefetcher<typename P::value_type>,
-                                     do_nothing>::type type;
+                                    value_prefetcher<typename P::value_type>,
+                                    do_nothing>::type type;
 };
 
 template <typename P>
@@ -80,7 +80,7 @@ class node_base : public make_nodeversion<P>::type {
       static_cast<internode_type*>(this)->parent_ = p;
   }
   inline base_type* unsplit_ancestor() const {
-    base_type* x = const_cast<base_type*>(this), *p;
+    base_type *x = const_cast<base_type*>(this), *p;
     while (x->has_split() && (p = x->parent())) x = p;
     return x;
   }
@@ -98,8 +98,8 @@ class node_base : public make_nodeversion<P>::type {
 
   void prefetch_full() const {
     for (int i = 0;
-         i < std::min(16 * std::min(P::leaf_width, P::internode_width) + 1,
-                      4 * 64);
+         i <
+         std::min(16 * std::min(P::leaf_width, P::internode_width) + 1, 4 * 64);
          i += 64)
       ::prefetch((const char*)this + i);
   }
@@ -174,13 +174,13 @@ class internode : public node_base<P> {
   }
   void shift_up(int p, int xp, int n) {
     memmove(ikey0_ + p, ikey0_ + xp, sizeof(ikey0_[0]) * n);
-    for (node_base<P>** a = child_ + p + n, ** b = child_ + xp + n; n;
+    for (node_base<P>**a = child_ + p + n, **b = child_ + xp + n; n;
          --a, --b, --n)
       *a = *b;
   }
   void shift_down(int p, int xp, int n) {
     memmove(ikey0_ + p, ikey0_ + xp, sizeof(ikey0_[0]) * n);
-    for (node_base<P>** a = child_ + p + 1, ** b = child_ + xp + 1; n;
+    for (node_base<P>**a = child_ + p + 1, **b = child_ + xp + 1; n;
          ++a, ++b, --n)
       *a = *b;
   }
@@ -676,8 +676,7 @@ void leaf<P>::assign_ksuf(int p, Str s, bool initializing, threadinfo& ti) {
 }
 
 template <typename P>
-inline basic_table<P>::basic_table()
-    : root_(0), tuple_array_(nullptr) {}
+inline basic_table<P>::basic_table() : root_(0), tuple_array_(nullptr) {}
 
 template <typename P>
 inline node_base<P>* basic_table<P>::root() const {

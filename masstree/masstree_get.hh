@@ -15,8 +15,8 @@
  */
 #ifndef MASSTREE_GET_HH
 #define MASSTREE_GET_HH 1
-#include "masstree_tcursor.hh"
 #include "masstree_key.hh"
+#include "masstree_tcursor.hh"
 namespace Masstree {
 
 template <typename P>
@@ -51,30 +51,30 @@ forward:
     goto retry;
   } else {
 #ifdef HYU_VWEAVER /* HYU_VWEAVER */
-		int new_ki = kx.i + 1;
-		if (unsigned(new_ki) < unsigned(perm_.size())) {
-			next_ = n_;
-			next_perm_ = perm_;
-			i_ = kx.i + 1;
-  		lv_next_ = n_->lv_[next_perm_[i_]];
-		} else {
-  		next_ = n_->safe_next();
-			if (next_) {
-				next_->prefetch();
-				next_v_ = next_->stable();
-				next_perm_ = next_->permutation();
-				i_ = 0;
-				lv_next_ = next_->lv_[next_perm_[i_]];
-			} else {
-				next_ = nullptr;
-				next_perm_ = NULL;
-				lv_next_.make_empty();
-				i_ = -1;
-			}
-		}
+    int new_ki = kx.i + 1;
+    if (unsigned(new_ki) < unsigned(perm_.size())) {
+      next_ = n_;
+      next_perm_ = perm_;
+      i_ = kx.i + 1;
+      lv_next_ = n_->lv_[next_perm_[i_]];
+    } else {
+      next_ = n_->safe_next();
+      if (next_) {
+        next_->prefetch();
+        next_v_ = next_->stable();
+        next_perm_ = next_->permutation();
+        i_ = 0;
+        lv_next_ = next_->lv_[next_perm_[i_]];
+      } else {
+        next_ = nullptr;
+        next_perm_ = NULL;
+        lv_next_.make_empty();
+        i_ = -1;
+      }
+    }
 #endif /* HYU_VWEAVER */
     return match;
-	}
+  }
 }
 
 template <typename P>

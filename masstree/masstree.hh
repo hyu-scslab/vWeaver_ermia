@@ -26,9 +26,11 @@ namespace Masstree {
 using lcdf::Str;
 using lcdf::String;
 
-template <typename T> class value_print;
+template <typename T>
+class value_print;
 
-template <int LW = 15, int IW = LW> struct nodeparams {
+template <int LW = 15, int IW = LW>
+struct nodeparams {
   static constexpr int leaf_width = LW;
   static constexpr int internode_width = IW;
   static constexpr bool concurrent = true;
@@ -39,21 +41,33 @@ template <int LW = 15, int IW = LW> struct nodeparams {
   typedef uint64_t ikey_type;
 };
 
-template <int LW, int IW> constexpr int nodeparams<LW, IW>::leaf_width;
-template <int LW, int IW> constexpr int nodeparams<LW, IW>::internode_width;
-template <int LW, int IW> constexpr int nodeparams<LW, IW>::debug_level;
+template <int LW, int IW>
+constexpr int nodeparams<LW, IW>::leaf_width;
+template <int LW, int IW>
+constexpr int nodeparams<LW, IW>::internode_width;
+template <int LW, int IW>
+constexpr int nodeparams<LW, IW>::debug_level;
 
-template <typename P> class node_base;
-template <typename P> class leaf;
-template <typename P> class internode;
-template <typename P> class leafvalue;
-template <typename P> class key;
-template <typename P> class basic_table;
-template <typename P> class unlocked_tcursor;
-template <typename P> class tcursor;
+template <typename P>
+class node_base;
+template <typename P>
+class leaf;
+template <typename P>
+class internode;
+template <typename P>
+class leafvalue;
+template <typename P>
+class key;
+template <typename P>
+class basic_table;
+template <typename P>
+class unlocked_tcursor;
+template <typename P>
+class tcursor;
 
-template <typename P> class basic_table {
-public:
+template <typename P>
+class basic_table {
+ public:
   typedef P param_type;
   typedef node_base<P> node_type;
   typedef leaf<P> leaf_type;
@@ -73,17 +87,17 @@ public:
   bool get(Str key, value_type &value, threadinfo &ti) const;
 
 #ifdef HYU_VWEAVER /* HYU_VWEAVER */
-#ifdef HYU_EVAL_2 /* HYU_EVAL_2 */
+#ifdef HYU_EVAL_2  /* HYU_EVAL_2 */
   template <typename F>
   int scan_eval(Str firstkey, bool matchfirst, F &scanner,
-           ermia::TXN::xid_context *xc, threadinfo &ti,
-					 bool is_primary_idx, int scan_flag) const;
+                ermia::TXN::xid_context *xc, threadinfo &ti,
+                bool is_primary_idx, int scan_flag) const;
 #endif /* HYU_EVAL_2 */
   template <typename F>
   int scan(Str firstkey, bool matchfirst, F &scanner,
            ermia::TXN::xid_context *xc, threadinfo &ti,
-					 bool is_primary_idx) const;
-#else /* HYU_VWEAVER */
+           bool is_primary_idx) const;
+#else  /* HYU_VWEAVER */
   template <typename F>
   int scan(Str firstkey, bool matchfirst, F &scanner,
            ermia::TXN::xid_context *xc, threadinfo &ti) const;
@@ -94,19 +108,21 @@ public:
 
   template <typename F>
   int scan_oid(Str firstkey, bool matchfirst, F &scanner,
-           ermia::TXN::xid_context *xc, threadinfo &ti) const;
+               ermia::TXN::xid_context *xc, threadinfo &ti) const;
   template <typename F>
   int rscan_oid(Str firstkey, bool matchfirst, F &scanner,
-            ermia::TXN::xid_context *xc, threadinfo &ti) const;
+                ermia::TXN::xid_context *xc, threadinfo &ti) const;
 
-  template <typename F> inline int modify(Str key, F &f, threadinfo &ti);
-  template <typename F> inline int modify_insert(Str key, F &f, threadinfo &ti);
+  template <typename F>
+  inline int modify(Str key, F &f, threadinfo &ti);
+  template <typename F>
+  inline int modify_insert(Str key, F &f, threadinfo &ti);
 
   inline void print(FILE *f = 0, int indent = 0) const;
   inline void set_tuple_array(ermia::oid_array *oa) { tuple_array_ = oa; }
   inline void set_pdest_array(ermia::oid_array *oa) { pdest_array_ = oa; }
 
-private:
+ private:
   node_type *root_;
   ermia::oid_array *tuple_array_;
   ermia::oid_array *pdest_array_;
@@ -114,15 +130,15 @@ private:
 #ifdef HYU_VWEAVER /* HYU_VWEAVER */
   template <typename H, typename F>
   int scan_zigzag(H helper, Str firstkey, bool matchfirst, F &scanner,
-           ermia::TXN::xid_context *xc, threadinfo &ti, bool pr) const;
+                  ermia::TXN::xid_context *xc, threadinfo &ti, bool pr) const;
 
 #endif /* HYU_VWEAVER */
 
 #ifdef HYU_EVAL_2 /* HYU_EVAL_2 */
   template <typename H, typename F>
   int scan_eval(H helper, Str firstkey, bool matchfirst, F &scanner,
-           ermia::TXN::xid_context *xc, threadinfo &ti,
-					 int scan_flag) const;
+                ermia::TXN::xid_context *xc, threadinfo &ti,
+                int scan_flag) const;
 #endif /* HYU_EVAL_2 */
   template <typename H, typename F>
   int scan(H helper, Str firstkey, bool matchfirst, F &scanner,
@@ -130,11 +146,11 @@ private:
 
   template <typename H, typename F>
   int scan_oid(H helper, Str firstkey, bool matchfirst, F &scanner,
-           ermia::TXN::xid_context *xc, threadinfo &ti) const;
+               ermia::TXN::xid_context *xc, threadinfo &ti) const;
 
   friend class unlocked_tcursor<P>;
   friend class tcursor<P>;
 };
 
-} // namespace Masstree
+}  // namespace Masstree
 #endif

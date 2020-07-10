@@ -15,8 +15,8 @@
  */
 #ifndef MASSTREE_PRINT_HH
 #define MASSTREE_PRINT_HH
-#include "masstree_struct.hh"
 #include <stdio.h>
+#include "masstree_struct.hh"
 
 namespace Masstree {
 

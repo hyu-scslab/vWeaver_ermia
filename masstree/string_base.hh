@@ -15,13 +15,13 @@
  */
 #ifndef STRING_BASE_HH
 #define STRING_BASE_HH
+#include <assert.h>
+#include <ctype.h>
+#include <limits.h>
+#include <string.h>
+#include <iostream>
 #include "compiler.hh"
 #include "hashcode.hh"
-#include <assert.h>
-#include <string.h>
-#include <limits.h>
-#include <ctype.h>
-#include <iostream>
 namespace lcdf {
 class StringAccum;
 #define LCDF_CONSTANT_CSTR(cstr) \
@@ -520,33 +520,33 @@ typename String_base<T>::const_iterator String_base<T>::encode_json_partial(
     enc.append(last, s);
     enc << '\\';
     switch (c) {
-      case '\b':
-        enc << 'b';
-        break;
-      case '\f':
-        enc << 'f';
-        break;
-      case '\n':
-        enc << 'n';
-        break;
-      case '\r':
-        enc << 'r';
-        break;
-      case '\t':
-        enc << 't';
-        break;
-      case '\\':
-      case '\"':
-      case '/':
-        enc << (char)c;
-        break;
-      default: {  // c is a control character, 0x2028, or 0x2029
-        char *x = enc.reserve(5);
-        snprintf(x, 5, "u%04X", c);
-        if (c > 255)  // skip rest of encoding of U+202[89]
-          s += 2;
-        break;
-      }
+    case '\b':
+      enc << 'b';
+      break;
+    case '\f':
+      enc << 'f';
+      break;
+    case '\n':
+      enc << 'n';
+      break;
+    case '\r':
+      enc << 'r';
+      break;
+    case '\t':
+      enc << 't';
+      break;
+    case '\\':
+    case '\"':
+    case '/':
+      enc << (char)c;
+      break;
+    default: {  // c is a control character, 0x2028, or 0x2029
+      char *x = enc.reserve(5);
+      snprintf(x, 5, "u%04X", c);
+      if (c > 255)  // skip rest of encoding of U+202[89]
+        s += 2;
+      break;
+    }
     }
     last = s + 1;
   }

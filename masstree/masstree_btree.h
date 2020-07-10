@@ -18,9 +18,9 @@
 #include "masstree_print.hh"
 #include "masstree_remove.hh"
 #include "masstree_scan.hh"
-#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+#ifdef HYU_VWEAVER /* HYU_VWEAVER */
 #include "masstree_struct.hh"
-#endif /* HYU_ZIGZAG */
+#endif /* HYU_VWEAVER */
 #include "mtcounters.hh"
 #include "timestamp.hh"
 
@@ -126,9 +126,9 @@ public:
   typedef Masstree::basic_table<P> basic_table_type;
   typedef Masstree::unlocked_tcursor<P> unlocked_tcursor_type;
   typedef typename node_base_type::nodeversion_type nodeversion_type;
-#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+#ifdef HYU_VWEAVER /* HYU_VWEAVER */
 	typedef typename Masstree::leaf<P>::permuter_type permuter_type;
-#endif /* HYU_ZIGZAG */
+#endif /* HYU_VWEAVER */
 
   typedef varstr key_type;
   typedef lcdf::Str string_type;
@@ -195,12 +195,12 @@ public:
 
   /** NOTE: the public interface assumes that the caller has taken care
    * of setting up RCU */
-#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+#ifdef HYU_VWEAVER /* HYU_VWEAVER */
 	inline bool search_zigzag(const key_type &k, OID &o, OID &next_o,
 														Masstree::leaf<P> **next_leaf,
 														permuter_type &next_perm, int &next_ki,
 														epoch_num e, versioned_node_t *search_info) const;
-#endif /* HYU_ZIGZAG */
+#endif /* HYU_VWEAVER */
   inline bool search(const key_type &k, OID &o, epoch_num e,
                      versioned_node_t *search_info = nullptr) const;
 
@@ -516,7 +516,7 @@ template <typename P> inline size_t mbtree<P>::size() const {
   return c.size_;
 }
 
-#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+#ifdef HYU_VWEAVER /* HYU_VWEAVER */
 template <typename P>
 inline bool mbtree<P>::search_zigzag(const key_type &k, OID &o, OID &next_o,
 														Masstree::leaf<P> **next_leaf,
@@ -537,7 +537,7 @@ inline bool mbtree<P>::search_zigzag(const key_type &k, OID &o, OID &next_o,
   }
   return found;
 }
-#endif /* HYU_ZIGZAG */
+#endif /* HYU_VWEAVER */
 
 template <typename P>
 inline bool mbtree<P>::search(const key_type &k, OID &o, epoch_num e,
@@ -701,7 +701,7 @@ public:
     return callback_.invoke(key.full_string(), oid, this->v_);
   }
 
-#ifdef HYU_ZIGZAG
+#ifdef HYU_VWEAVER
  //[HYU] for chk
 public:
 #else
@@ -758,12 +758,12 @@ mbtree<P>::search_range_call(const key_type &lower, const key_type *upper,
                              TXN::xid_context *xc) const {
   low_level_search_range_scanner<false> scanner(this, upper, callback);
 	threadinfo ti(xc->begin_epoch);
-#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+#ifdef HYU_VWEAVER /* HYU_VWEAVER */
 	bool pr = is_primary_idx_;
   table_.scan(lcdf::Str(lower.data(), lower.size()), true, scanner, xc, ti, pr);
-#else /* HYU_ZIGZAG */
+#else /* HYU_VWEAVER */
   table_.scan(lcdf::Str(lower.data(), lower.size()), true, scanner, xc, ti);
-#endif /* HYU_ZIGZAG */
+#endif /* HYU_VWEAVER */
 }
 
 template <typename P>

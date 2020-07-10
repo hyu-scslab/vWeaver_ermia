@@ -1173,14 +1173,14 @@ rc_t transaction::si_commit() {
   // And also, we can guarantee about crash because of log flush
   volatile_write(xc->state, TXN::TXN_ALMOST_COMMIT);
 
-#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+#ifdef HYU_VWEAVER /* HYU_VWEAVER */
 #ifdef HYU_EVAL   /* HYU_EVAL */
   int64_t start;
   int64_t latency = 0;
   struct timespec kridgy_time;
   bool chk = false;
 #endif            /* HYU_EVAL */
-#endif            /* HYU_ZIGZAG */
+#endif            /* HYU_VWEAVER */
 
   // post-commit cleanup: install clsn to tuples
   // (traverse write-tuple)
@@ -1189,7 +1189,7 @@ rc_t transaction::si_commit() {
   auto &write_set = GetWriteSet();
   for (uint32_t i = 0; i < write_set.size(); ++i) {
     auto &w = write_set[i];
-#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+#ifdef HYU_VWEAVER /* HYU_VWEAVER */
 #ifdef HYU_EVAL   /* HYU_EVAL */
     if (!chk) {
       clock_gettime(CLOCK_MONOTONIC, &kridgy_time);
@@ -1263,7 +1263,7 @@ rc_t transaction::si_commit() {
 
   commit_ts:
 
-#endif /* HYU_ZIGZAG */
+#endif /* HYU_VWEAVER */
     Object *object = w.get_object();
     ASSERT(object);
     dbtuple *tuple = (dbtuple *)object->GetPayload();
@@ -1291,7 +1291,7 @@ rc_t transaction::si_commit() {
   clock_gettime(CLOCK_MONOTONIC, &vanilla_update);
   update_cost = (int64_t)vanilla_update.tv_nsec - start_time;
 
-#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+#ifdef HYU_VWEAVER /* HYU_VWEAVER */
   kridgy_cost = latency;
   if (start_time > 0 && update_cost > 0) {
     update_cost -= vridgy_cost;
@@ -1344,7 +1344,7 @@ rc_t transaction::si_commit() {
     fflush(fp);
     // fclose(fp);
   }
-#endif            /* HYU_ZIGZAG */
+#endif            /* HYU_VWEAVER */
   fclose(fp);
 #endif            /* HYU_EVAL */
 
@@ -1361,13 +1361,13 @@ bool transaction::MasstreeCheckPhantom() {
   return true;
 }
 
-#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+#ifdef HYU_VWEAVER /* HYU_VWEAVER */
 rc_t transaction::Update(IndexDescriptor *index_desc, OID oid, const varstr *k,
                          varstr *v, next_key_info_t next_key_info) {
-#else  /* HYU_ZIGZAG */
+#else  /* HYU_VWEAVER */
 rc_t transaction::Update(IndexDescriptor *index_desc, OID oid, const varstr *k,
                          varstr *v) {
-#endif /* HYU_ZIGZAG */
+#endif /* HYU_VWEAVER */
 
   oid_array *tuple_array = index_desc->GetTupleArray();
   FID tuple_fid = index_desc->GetTupleFid();
@@ -1483,21 +1483,21 @@ rc_t transaction::Update(IndexDescriptor *index_desc, OID oid, const varstr *k,
       ASSERT(tuple->NextVolatile() == prev);
 #endif
 
-#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+#ifdef HYU_VWEAVER /* HYU_VWEAVER */
       add_to_write_set_zigzag(tuple_array->get(oid), k, index_desc, oid,
                               next_key_info);
-#else  /* HYU_ZIGZAG */
+#else  /* HYU_VWEAVER */
       add_to_write_set(tuple_array->get(oid));
-#endif /* HYU_ZIGZAG */
+#endif /* HYU_VWEAVER */
       prev_persistent_ptr = prev_obj->GetPersistentAddress();
     }
 
     ASSERT(not tuple->pvalue or tuple->pvalue->size() == tuple->size);
     ASSERT(tuple->GetObject()->GetClsn().asi_type() == fat_ptr::ASI_XID);
     ASSERT(oidmgr->oid_get_version(tuple_fid, oid, xc) == tuple);
-#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+#ifdef HYU_VWEAVER /* HYU_VWEAVER */
     ASSERT(oidmgr->oid_get_version_zigzag(tuple_fid, oid, xc) == tuple);
-#endif /* HYU_ZIGZAG */
+#endif /* HYU_VWEAVER */
     ASSERT(log);
 
     // FIXME(tzwang): mark deleted in all 2nd indexes as well?
@@ -1561,10 +1561,10 @@ OID transaction::PrepareInsert(OrderedIndex *index, varstr *value,
     ASSERT(decode_size_aligned(new_head.size_code()) >= (*out_tuple)->size);
     (*out_tuple)->GetObject()->SetClsn(xid.to_ptr());
     oid = oidmgr->alloc_oid(tuple_fid);
-#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+#ifdef HYU_VWEAVER /* HYU_VWEAVER */
     Object *new_head_obj = (Object *)new_head.offset();
     new_head_obj->rec_id = oid;
-#endif /* HYU_ZIGZAG */
+#endif /* HYU_VWEAVER */
     // [HYU]
     __sync_synchronize();
     // [HYU] end
@@ -1656,16 +1656,16 @@ void transaction::FinishInsert(OrderedIndex *index, OID oid, const varstr *key,
   if (likely(is_primary_idx)) {
     // update write_set
     ASSERT(tuple->pvalue->size() == tuple->size);
-#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+#ifdef HYU_VWEAVER /* HYU_VWEAVER */
     next_key_info_t nk_info;
     memset(&nk_info, 0, sizeof(next_key_info_t));
     nk_info.ki = -2;
 
     add_to_write_set_zigzag(tuple_array->get(oid), key, index->GetDescriptor(),
                             oid, nk_info);
-#else  /* HYU_ZIGZAG */
+#else  /* HYU_VWEAVER */
     add_to_write_set(tuple_array->get(oid));
-#endif /* HYU_ZIGZAG */
+#endif /* HYU_VWEAVER */
   }
 }
 

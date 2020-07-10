@@ -41,12 +41,12 @@ public:
     return n.n_->compare_key(k, p);
   }
 
-#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+#ifdef HYU_VWEAVER /* HYU_VWEAVER */
 // [HYU] make public for using zigzag_move
 public:
-#else /* HYU_ZIGZAG */
+#else /* HYU_VWEAVER */
 private:
-#endif /* HYU_ZIGZAG */
+#endif /* HYU_VWEAVER */
   node_base<P> *root_;
   leaf<P> *n_;
   nodeversion_type v_;
@@ -282,7 +282,7 @@ changed:
   return scan_find_next;
 }
 
-#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+#ifdef HYU_VWEAVER /* HYU_VWEAVER */
 template <typename P>
 template <typename H, typename F>
 int basic_table<P>::scan_zigzag(H helper, Str firstkey, bool emit_firstkey, F &scanner,
@@ -455,7 +455,7 @@ done:
   return scancount;
 }
 
-#endif /* HYU_ZIGZAG */
+#endif /* HYU_VWEAVER */
 
 #ifdef HYU_EVAL_2 /* HYU_EVAL_2 */
 template <typename P>
@@ -634,7 +634,7 @@ done:
   return scancount;
 }
 
-#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+#ifdef HYU_VWEAVER /* HYU_VWEAVER */
 #ifdef HYU_EVAL_2 /* HYU_EVAL_2 */
 template <typename P>
 template <typename F>
@@ -660,14 +660,14 @@ int basic_table<P>::scan(Str firstkey, bool emit_firstkey, F &scanner,
   return scan_zigzag(forward_scan_helper(), firstkey, emit_firstkey,
 										scanner, xc, ti, is_primary_idx);
 }
-#else /* HYU_ZIGZAG */
+#else /* HYU_VWEAVER */
 template <typename P>
 template <typename F>
 int basic_table<P>::scan(Str firstkey, bool emit_firstkey, F &scanner,
                          ermia::TXN::xid_context *xc, threadinfo &ti) const {
   return scan(forward_scan_helper(), firstkey, emit_firstkey, scanner, xc, ti);
 }
-#endif /* HYU_ZIGZAG */
+#endif /* HYU_VWEAVER */
 
 template <typename P>
 template <typename F>

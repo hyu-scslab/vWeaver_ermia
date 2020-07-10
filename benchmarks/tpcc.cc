@@ -2836,15 +2836,15 @@ rc_t tpcc_worker::txn_query2() {
   int time_cnt = 0;
   static int think = 0;
   double before, after;
-#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+#ifdef HYU_VWEAVER /* HYU_VWEAVER */
   FILE *lfp = fopen("vweaver_latency_diff.data", "a+");
   FILE *before_fp = fopen("vweaver_before_latency.data", "a+");
   FILE *after_fp = fopen("vweaver_after_latency.data", "a+");
-#else  /* HYU_ZIGZAG */
+#else  /* HYU_VWEAVER */
   FILE *lfp = fopen("vanilla_latency_diff.data", "a+");
   FILE *before_fp = fopen("vanilla_before_latency.data", "a+");
   FILE *after_fp = fopen("vanilla_after_latency.data", "a+");
-#endif /* HYU_ZIGZAG */
+#endif /* HYU_VWEAVER */
 
   gettimeofday(&latency_tv, 0);
   if (start_latency_time == 0) start_latency_time = latency_tv.tv_sec;

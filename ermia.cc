@@ -251,9 +251,9 @@ void ConcurrentMasstreeIndex::Get(transaction *t, rc_t &rc, const varstr &key,
     bool found = masstree_.search(key, oid, t->xc->begin_epoch, &sinfo);
 
     dbtuple *tuple = nullptr;
-#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+#ifdef HYU_VWEAVER /* HYU_VWEAVER */
                   // dbtuple *zigzag_tuple = nullptr;
-#endif            /* HYU_ZIGZAG */
+#endif            /* HYU_VWEAVER */
     if (found) {
       // Key-OID mapping exists, now try to get the actual tuple to be sure
       if (config::is_backup_srv()) {
@@ -264,7 +264,7 @@ void ConcurrentMasstreeIndex::Get(transaction *t, rc_t &rc, const varstr &key,
       retry_get:
         uint64_t point_cnt = 0;
         uint64_t zigzag_cnt = 0;
-#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+#ifdef HYU_VWEAVER /* HYU_VWEAVER */
         tuple =
 #ifdef HYU_DEBUG /* HYU_DEBUG */
             oidmgr->oid_get_version_zigzag_debug(descriptor_->GetTupleArray(),
@@ -274,7 +274,7 @@ void ConcurrentMasstreeIndex::Get(transaction *t, rc_t &rc, const varstr &key,
                                            t->xc);
 #endif /* HYU_DEBUG */
 
-#else            /* HYU_ZIGZAG */
+#else            /* HYU_VWEAVER */
         tuple =
 #ifdef HYU_DEBUG /* HYU_DEBUG */
             oidmgr->oid_get_version_debug(descriptor_->GetTupleArray(), oid,
@@ -286,7 +286,7 @@ void ConcurrentMasstreeIndex::Get(transaction *t, rc_t &rc, const varstr &key,
         //	printf("[HYU] scan fail in GET\n");
         //	goto retry_get;
         //}
-#endif           /* HYU_ZIGZAG */
+#endif           /* HYU_VWEAVER */
       }
       if (!tuple) {
         found = false;
@@ -381,7 +381,7 @@ rc_t ConcurrentMasstreeIndex::DoTreePut(transaction &t, const varstr *k,
   // do regular search
   OID oid = 0;
   rc_t rc = {RC_INVALID};
-#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+#ifdef HYU_VWEAVER /* HYU_VWEAVER */
 
   next_key_info_t next_key_info;
   GetOID(*k, rc, t.xc, oid, next_key_info);
@@ -391,7 +391,7 @@ rc_t ConcurrentMasstreeIndex::DoTreePut(transaction &t, const varstr *k,
   } else {
     return rc_t{RC_ABORT_INTERNAL};
   }
-#else  /* HYU_ZIGZAG */
+#else  /* HYU_VWEAVER */
   GetOID(*k, rc, t.xc, oid);
 
   if (rc._val == RC_TRUE) {
@@ -399,7 +399,7 @@ rc_t ConcurrentMasstreeIndex::DoTreePut(transaction &t, const varstr *k,
   } else {
     return rc_t{RC_ABORT_INTERNAL};
   }
-#endif /* HYU_ZIGZAG */
+#endif /* HYU_VWEAVER */
 }
 
 rc_t ConcurrentMasstreeIndex::DoNodeRead(

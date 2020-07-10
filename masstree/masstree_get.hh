@@ -50,7 +50,7 @@ forward:
     root = lv_.layer();
     goto retry;
   } else {
-#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+#ifdef HYU_VWEAVER /* HYU_VWEAVER */
 		int new_ki = kx.i + 1;
 		if (unsigned(new_ki) < unsigned(perm_.size())) {
 			next_ = n_;
@@ -72,7 +72,7 @@ forward:
 				i_ = -1;
 			}
 		}
-#endif /* HYU_ZIGZAG */
+#endif /* HYU_VWEAVER */
     return match;
 	}
 }

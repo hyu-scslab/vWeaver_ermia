@@ -456,9 +456,9 @@ int main(int argc, char **argv) {
               << std::endl;
     std::cerr << "  wait-for-backups  : " << ermia::config::wait_for_backups
               << std::endl;
-#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
-    std::cerr << "  HYU ZIGZAG  " << std::endl;
-#endif                /* HYU_ZIGZAG */
+#ifdef HYU_VWEAVER /* HYU_VWEAVER */
+    std::cerr << "  HYU VWEAVER  " << std::endl;
+#endif                /* HYU_VWEAVER */
 #ifdef HYU_MOTIVATION /* HYU_MOTIVATION */
     std::cerr << "  HYU_MOTIVATION  " << std::endl;
 #endif          /* HYU_MOTIVATION */

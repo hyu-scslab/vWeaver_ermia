@@ -135,16 +135,16 @@ class OrderedIndex {
   rc_t TryInsert(transaction &t, const varstr *k, varstr *v, bool upsert,
                  OID *inserted_oid);
 
-#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+#ifdef HYU_VWEAVER /* HYU_VWEAVER */
   virtual void GetOID(
       const varstr &key, rc_t &rc, TXN::xid_context *xc, OID &out_oid,
       next_key_info_t &next_key_info,
       ConcurrentMasstree::versioned_node_t *out_sinfo = nullptr) = 0;
-#else  /* HYU_ZIGZAG */
+#else  /* HYU_VWEAVER */
   virtual void GetOID(
       const varstr &key, rc_t &rc, TXN::xid_context *xc, OID &out_oid,
       ConcurrentMasstree::versioned_node_t *out_sinfo = nullptr) = 0;
-#endif /* HYU_ZIGZAG */
+#endif /* HYU_VWEAVER */
 
   /**
    * Insert key-oid pair to the underlying actual index structure.
@@ -259,7 +259,7 @@ class ConcurrentMasstreeIndex : public OrderedIndex {
   std::map<std::string, uint64_t> Clear() override;
   inline void SetArrays() override { masstree_.set_arrays(descriptor_); }
 
-#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+#ifdef HYU_VWEAVER /* HYU_VWEAVER */
   inline void GetOID(
       const varstr &key, rc_t &rc, TXN::xid_context *xc, OID &out_oid,
       next_key_info_t &next_key_info,
@@ -279,14 +279,14 @@ class ConcurrentMasstreeIndex : public OrderedIndex {
     }
     volatile_write(rc._val, found ? RC_TRUE : RC_FALSE);
   }
-#else  /* HYU_ZIGZAG */
+#else  /* HYU_VWEAVER */
   inline void GetOID(
       const varstr &key, rc_t &rc, TXN::xid_context *xc, OID &out_oid,
       ConcurrentMasstree::versioned_node_t *out_sinfo = nullptr) override {
     bool found = masstree_.search(key, out_oid, xc->begin_epoch, out_sinfo);
     volatile_write(rc._val, found ? RC_TRUE : RC_FALSE);
   }
-#endif /* HYU_ZIGZAG */
+#endif /* HYU_VWEAVER */
 
  private:
   bool InsertIfAbsent(transaction *t, const varstr &key, OID oid) override;

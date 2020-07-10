@@ -5,9 +5,9 @@
 
 #include <vector>
 
-#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+#ifdef HYU_VWEAVER /* HYU_VWEAVER */
 #include <cstring>
-#endif          /* HYU_ZIGZAG */
+#endif          /* HYU_VWEAVER */
 #ifdef HYU_EVAL /* HYU_EVAL */
 #include <stdio.h>
 #include <time.h>
@@ -28,14 +28,14 @@
 using google::dense_hash_map;
 
 namespace ermia {
-#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+#ifdef HYU_VWEAVER /* HYU_VWEAVER */
 struct next_key_info_t {
   OID oid;
   Masstree::leaf<masstree_params> *leaf;
   Masstree::leaf<masstree_params>::permuter_type perm;
   int ki;  // -1 is end of leaf, -2 is insertion case
 };
-#endif /* HYU_ZIGZAG */
+#endif /* HYU_VWEAVER */
 
 // A write-set entry is essentially a pointer to the OID array entry
 // begin updated. The write-set is naturally de-duplicated: repetitive
@@ -43,7 +43,7 @@ struct next_key_info_t {
 // the entry pointer results a fat_ptr to the new object.
 struct write_record_t {
   fat_ptr *entry;
-#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+#ifdef HYU_VWEAVER /* HYU_VWEAVER */
   varstr key;
   IndexDescriptor *idx_desc;
   OID oid;
@@ -58,10 +58,10 @@ struct write_record_t {
     memcpy(&next_key_info, &nk_info, sizeof(next_key_info_t));
   }
   write_record_t() : entry(nullptr), idx_desc(nullptr) {}
-#else  /* HYU_ZIGZAG */
+#else  /* HYU_VWEAVER */
   write_record_t(fat_ptr *entry) : entry(entry) {}
   write_record_t() : entry(nullptr) {}
-#endif /* HYU_ZIGZAG */
+#endif /* HYU_VWEAVER */
   inline Object *get_object() { return (Object *)entry->offset(); }
 };
 
@@ -70,7 +70,7 @@ struct write_set_t {
   uint32_t num_entries;
   write_record_t entries[kMaxEntries];
   write_set_t() : num_entries(0) {}
-#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+#ifdef HYU_VWEAVER /* HYU_VWEAVER */
   inline void emplace_back(fat_ptr *oe, const varstr *k,
                            IndexDescriptor *index_desc, OID oid,
                            next_key_info_t next_key_info) {
@@ -80,14 +80,14 @@ struct write_set_t {
     ++num_entries;
     ASSERT(entries[num_entries - 1].entry == oe);
   }
-#else  /* HYU_ZIGZAG */
+#else  /* HYU_VWEAVER */
   inline void emplace_back(fat_ptr *oe) {
     ALWAYS_ASSERT(num_entries < kMaxEntries);
     new (&entries[num_entries]) write_record_t(oe);
     ++num_entries;
     ASSERT(entries[num_entries - 1].entry == oe);
   }
-#endif /* HYU_ZIGZAG */
+#endif /* HYU_VWEAVER */
   inline uint32_t size() { return num_entries; }
   inline void clear() { num_entries = 0; }
   inline write_record_t &operator[](uint32_t idx) { return entries[idx]; }
@@ -172,12 +172,12 @@ class transaction {
   bool TryInsertNewTuple(OrderedIndex *index, const varstr *key, varstr *value,
                          OID *inserted_oid);
 
-#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+#ifdef HYU_VWEAVER /* HYU_VWEAVER */
   rc_t Update(IndexDescriptor *index_desc, OID oid, const varstr *k, varstr *v,
               next_key_info_t next_key_info);
-#else  /* HYU_ZIGZAG */
+#else  /* HYU_VWEAVER */
   rc_t Update(IndexDescriptor *index_desc, OID oid, const varstr *k, varstr *v);
-#endif /* HYU_ZIGZAG */
+#endif /* HYU_VWEAVER */
 
  public:
   // Reads the contents of tuple into v within this transaction context
@@ -201,7 +201,7 @@ class transaction {
     return write_set;
   }
 
-#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+#ifdef HYU_VWEAVER /* HYU_VWEAVER */
   // oid is for debug
   inline void add_to_write_set_zigzag(fat_ptr *entry, const varstr *k,
                                       IndexDescriptor *index_desc, OID oid,
@@ -216,7 +216,7 @@ class transaction {
 #endif
     GetWriteSet().emplace_back(entry, k, index_desc, oid, next_key_info);
   }
-#else /* HYU_ZIGZAG */
+#else /* HYU_VWEAVER */
   inline void add_to_write_set(fat_ptr *entry) {
 #ifndef NDEBUG
     auto &write_set = GetWriteSet();
@@ -228,7 +228,7 @@ class transaction {
 #endif
     GetWriteSet().emplace_back(entry);
   }
-#endif /* HYU_ZIGZAG */
+#endif /* HYU_VWEAVER */
 
   inline TXN::xid_context *GetXIDContext() { return xc; }
 

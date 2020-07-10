@@ -23,9 +23,9 @@
 
 namespace ermia {
 sm_oid_mgr *oidmgr = NULL;
-#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+#ifdef HYU_VWEAVER /* HYU_VWEAVER */
 thread_local uint64_t seed;
-#endif /* HYU_ZIGZAG */
+#endif /* HYU_VWEAVER */
 
 struct thread_data {
   static size_t const NENTRIES = 4096;
@@ -124,9 +124,9 @@ void thread_init() {
   THROW_IF(err, os_error, errno, "pthread_setspecific failed");
   success = true;
 
-#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+#ifdef HYU_VWEAVER /* HYU_VWEAVER */
 	seed = (uint64_t)tid;
-#endif /* HYU_ZIGZAG */
+#endif /* HYU_VWEAVER */
 
   tls = tmp;
 }
@@ -670,7 +670,7 @@ void sm_oid_mgr::oid_put_new_if_absent(FID f, OID o, fat_ptr p) {
   }
 }
 
-#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+#ifdef HYU_VWEAVER /* HYU_VWEAVER */
 /* bool @out 	true if success to submit highway chain */
 bool sm_oid_mgr::SubmitHighwayChain(Object* new_obj, fat_ptr old_ptr) {
 	fat_ptr next_ptr = volatile_read(old_ptr);
@@ -747,7 +747,7 @@ bool sm_oid_mgr::SubmitHighwayChain(Object* new_obj, fat_ptr old_ptr) {
 	}
 	return false;
 }
-#endif /* HYU_ZIGZAG */
+#endif /* HYU_VWEAVER */
 
 fat_ptr sm_oid_mgr::PrimaryTupleUpdate(FID f, OID o, const varstr *value,
                                        TXN::xid_context *updater_xc,
@@ -854,13 +854,13 @@ install:
   if (overwrite) {
     new_object->SetNextPersistent(old_desc->GetNextPersistent());
     new_object->SetNextVolatile(old_desc->GetNextVolatile());		
-#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+#ifdef HYU_VWEAVER /* HYU_VWEAVER */
 		new_object->SetHighway(old_desc->GetHighway());
 		new_object->SetHighwayClsn(old_desc->GetHighwayClsn());
 		new_object->SetLevel(old_desc->GetLevel());
 		new_object->SetHighwayLevel(old_desc->GetHighwayLevel());
 		new_object->rec_id = old_desc->rec_id;
-#endif /* HYU_ZIGZAG */
+#endif /* HYU_VWEAVER */
     // I already claimed it, no need to use cas then
     volatile_write(ptr->_ptr, new_obj_ptr->_ptr);
     __sync_synchronize();
@@ -873,7 +873,7 @@ install:
     new_object->SetNextPersistent(pa);
     new_object->SetNextVolatile(head);
 
-#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+#ifdef HYU_VWEAVER /* HYU_VWEAVER */
 #ifdef HYU_EVAL /* HYU_EVAL */
 		int64_t start_time, latency;
 		struct timespec vridgy_time;
@@ -902,11 +902,11 @@ install:
 			bool submit = SubmitHighwayChain(new_object, head);
 			new_object->rec_id = o;
 			__sync_synchronize();
-#endif /* HYU_ZIGZAG */
+#endif /* HYU_VWEAVER */
 
     if (__sync_bool_compare_and_swap(&ptr->_ptr, head._ptr,
                                      new_obj_ptr->_ptr)) {
-#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+#ifdef HYU_VWEAVER /* HYU_VWEAVER */
 #ifdef HYU_EVAL /* HYU_EVAL */
 			if (!updater_xc->xct->check) {
 				clock_gettime(CLOCK_MONOTONIC, &vridgy_time);
@@ -915,7 +915,7 @@ install:
 				updater_xc->xct->check = true;
 			}
 #endif /* HYU_EVAL */
-#endif /* HYU_ZIGZAG */
+#endif /* HYU_VWEAVER */
       // Succeeded installing a new version, now only I can modify the
       // chain, try recycle some objects
       if (config::enable_gc) {
@@ -933,7 +933,7 @@ dbtuple *sm_oid_mgr::oid_get_latest_version(FID f, OID o) {
   return oid_get_latest_version(get_impl(this)->get_array(f), o);
 }
 
-#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+#ifdef HYU_VWEAVER /* HYU_VWEAVER */
 #ifdef HYU_DEBUG /* HYU_DEBUG */
 dbtuple *sm_oid_mgr::oid_get_version_zigzag_debug(FID f, OID o, TXN::xid_context *visitor_xc, uint64_t *cnt) {
   ASSERT(f);
@@ -944,7 +944,7 @@ dbtuple *sm_oid_mgr::oid_get_version_zigzag(FID f, OID o, TXN::xid_context *visi
   ASSERT(f);
   return oid_get_version_zigzag(get_impl(this)->get_array(f), o, visitor_xc);
 }
-#endif /* HYU_ZIGZAG */
+#endif /* HYU_VWEAVER */
 
 #ifdef HYU_DEBUG /* HYU_DEBUG */
 dbtuple *sm_oid_mgr::oid_get_version_debug(FID f, OID o, TXN::xid_context *visitor_xc, uint64_t *cnt) {
@@ -1418,7 +1418,7 @@ start_over:
 	return nullptr;  // No Visible records
 }
 
-#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+#ifdef HYU_VWEAVER /* HYU_VWEAVER */
 #ifdef HYU_DEBUG /* HYU_DEBUG */
 // For tuple arrays only, i.e., entries are guaranteed to point to Objects.
 dbtuple *sm_oid_mgr::oid_get_version_zigzag_debug(oid_array *oa, OID o,
@@ -1776,7 +1776,7 @@ start_over:
 }
 
 
-#endif /* HYU_ZIGZAG */
+#endif /* HYU_VWEAVER */
 
 bool sm_oid_mgr::TestVisibility(Object *object, TXN::xid_context *xc, bool &retry) {
   fat_ptr clsn = object->GetClsn();

@@ -42,14 +42,14 @@ class Object {
   // commit. size_code refers to the whole object including header
   fat_ptr clsn_;
 
-#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+#ifdef HYU_VWEAVER /* HYU_VWEAVER */
   // highway pointer in version chain
   fat_ptr highway_;
 
   // copy of highway version's clsn
   fat_ptr highway_clsn_;
 
-  // next-key shortcut for ZIGZAG
+  // next-key shortcut for VWEAVER
   fat_ptr left_shortcut_;
 
   // level of version
@@ -57,7 +57,7 @@ class Object {
 
   // level of highway version
   uint8_t highway_lv_;
-#endif /* HYU_ZIGZAG */
+#endif /* HYU_VWEAVER */
 
  public:
   static fat_ptr Create(const varstr* tuple_value, bool do_write,
@@ -70,13 +70,13 @@ class Object {
         next_pdest_(NULL_PTR),
         next_volatile_(NULL_PTR),
         clsn_(NULL_PTR),
-#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+#ifdef HYU_VWEAVER /* HYU_VWEAVER */
         highway_(NULL_PTR),
         highway_clsn_(NULL_PTR),
         left_shortcut_(NULL_PTR),
         lv_(1),
         highway_lv_(0),
-#endif /* HYU_ZIGZAG */
+#endif /* HYU_VWEAVER */
         HYU_gc_candidate_clsn_(0) {
   }
 
@@ -87,13 +87,13 @@ class Object {
         next_pdest_(next),
         next_volatile_(NULL_PTR),
         clsn_(NULL_PTR),
-#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+#ifdef HYU_VWEAVER /* HYU_VWEAVER */
         highway_(NULL_PTR),
         highway_clsn_(NULL_PTR),
         left_shortcut_(NULL_PTR),
         lv_(1),
         highway_lv_(0),
-#endif /* HYU_ZIGZAG */
+#endif /* HYU_VWEAVER */
         HYU_gc_candidate_clsn_(0) {
   }
 
@@ -126,7 +126,7 @@ class Object {
     }
     return (dbtuple*)GetPayload();
   }
-#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+#ifdef HYU_VWEAVER /* HYU_VWEAVER */
   inline int TossCoin(uint64_t* seed) {
     *seed ^= *seed >> 12;
     *seed ^= *seed << 25;
@@ -148,15 +148,15 @@ class Object {
   inline void SetLeftShortcut(fat_ptr left) {
     volatile_write(left_shortcut_, left);
   }
-#endif /* HYU_ZIGZAG */
+#endif /* HYU_VWEAVER */
   fat_ptr GenerateClsnPtr(uint64_t clsn);
   void Pin(
       bool load_from_logbuf = false);  // Make sure the payload is in memory
 
   // HYU_GC
   uint64_t HYU_gc_candidate_clsn_;
-#ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
+#ifdef HYU_VWEAVER /* HYU_VWEAVER */
   OID rec_id;
-#endif /* HYU_ZIGZAG */
+#endif /* HYU_VWEAVER */
 };
 }  // namespace ermia

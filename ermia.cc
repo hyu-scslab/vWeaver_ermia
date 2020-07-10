@@ -252,8 +252,8 @@ void ConcurrentMasstreeIndex::Get(transaction *t, rc_t &rc, const varstr &key,
 
     dbtuple *tuple = nullptr;
 #ifdef HYU_VWEAVER /* HYU_VWEAVER */
-                  // dbtuple *zigzag_tuple = nullptr;
-#endif            /* HYU_VWEAVER */
+                   // dbtuple *zigzag_tuple = nullptr;
+#endif             /* HYU_VWEAVER */
     if (found) {
       // Key-OID mapping exists, now try to get the actual tuple to be sure
       if (config::is_backup_srv()) {

@@ -1174,13 +1174,13 @@ rc_t transaction::si_commit() {
   volatile_write(xc->state, TXN::TXN_ALMOST_COMMIT);
 
 #ifdef HYU_VWEAVER /* HYU_VWEAVER */
-#ifdef HYU_EVAL   /* HYU_EVAL */
+#ifdef HYU_EVAL    /* HYU_EVAL */
   int64_t start;
   int64_t latency = 0;
   struct timespec kridgy_time;
   bool chk = false;
-#endif            /* HYU_EVAL */
-#endif            /* HYU_VWEAVER */
+#endif             /* HYU_EVAL */
+#endif             /* HYU_VWEAVER */
 
   // post-commit cleanup: install clsn to tuples
   // (traverse write-tuple)
@@ -1190,12 +1190,12 @@ rc_t transaction::si_commit() {
   for (uint32_t i = 0; i < write_set.size(); ++i) {
     auto &w = write_set[i];
 #ifdef HYU_VWEAVER /* HYU_VWEAVER */
-#ifdef HYU_EVAL   /* HYU_EVAL */
+#ifdef HYU_EVAL    /* HYU_EVAL */
     if (!chk) {
       clock_gettime(CLOCK_MONOTONIC, &kridgy_time);
       start = (int64_t)kridgy_time.tv_nsec;
     }
-#endif            /* HYU_EVAL */
+#endif             /* HYU_EVAL */
     ConcurrentMasstreeIndex *index;
     index = (ConcurrentMasstreeIndex *)w.idx_desc->GetIndex();
     OID oid;
@@ -1252,14 +1252,14 @@ rc_t transaction::si_commit() {
 
       next_obj->SetLeftShortcut(shortcut_ptr);
     }
-#ifdef HYU_EVAL   /* HYU_EVAL */
+#ifdef HYU_EVAL    /* HYU_EVAL */
     if (!chk) {
       clock_gettime(CLOCK_MONOTONIC, &kridgy_time);
       latency = (int64_t)kridgy_time.tv_nsec - start;
       // latency = latency + ((uint64_t)kridgy_time.tv_usec - start_time);
       chk = true;
     }
-#endif            /* HYU_EVAL */
+#endif             /* HYU_EVAL */
 
   commit_ts:
 
@@ -1344,9 +1344,9 @@ rc_t transaction::si_commit() {
     fflush(fp);
     // fclose(fp);
   }
-#endif            /* HYU_VWEAVER */
+#endif             /* HYU_VWEAVER */
   fclose(fp);
-#endif            /* HYU_EVAL */
+#endif             /* HYU_EVAL */
 
   return rc_t{RC_TRUE};
 }

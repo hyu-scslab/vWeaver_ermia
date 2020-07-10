@@ -1,23 +1,25 @@
 #pragma once
 
-#include "txn.h"
 #include <map>
+
+#include "txn.h"
 #include "../dbcore/sm-log-recover-impl.h"
 
 namespace ermia {
 class Engine {
-private:
+ private:
   void CreateTable(uint16_t index_type, const char *name,
                    const char *primary_name);
 
-public:
+ public:
   Engine();
   ~Engine() {}
 
   // All supported index types
   static const uint16_t kIndexConcurrentMasstree = 0x1;
 
-  inline void CreateMasstreeTable(const char *name, const char *primary_name = nullptr) {
+  inline void CreateMasstreeTable(const char *name,
+                                  const char *primary_name = nullptr) {
     CreateTable(kIndexConcurrentMasstree, name, primary_name);
   }
 
@@ -45,10 +47,10 @@ public:
 class OrderedIndex {
   friend class transaction;
 
-protected:
+ protected:
   IndexDescriptor *descriptor_;
 
-public:
+ public:
   OrderedIndex(std::string name, const char *primary = nullptr) {
     descriptor_ = IndexDescriptor::New(this, name, primary);
   }
@@ -56,7 +58,7 @@ public:
   virtual void *GetTable() = 0;
 
   class ScanCallback {
-  public:
+   public:
     ~ScanCallback() {}
     virtual bool Invoke(const char *keyp, size_t keylen,
                         const varstr &value) = 0;
@@ -67,8 +69,8 @@ public:
    * the memory associated with key. [rc] stores TRUE if found, FALSE otherwise.
    */
 #ifdef HYU_EVAL_2 /* HYU_EVAL_2 */
-  virtual void Get_eval(transaction *t, rc_t &rc, const varstr &key, varstr &value,
-                   int flag, OID *out_oid = nullptr) = 0;
+  virtual void Get_eval(transaction *t, rc_t &rc, const varstr &key,
+                        varstr &value, int flag, OID *out_oid = nullptr) = 0;
 #endif /* HYU_EVAL_2 */
   virtual void Get(transaction *t, rc_t &rc, const varstr &key, varstr &value,
                    OID *out_oid = nullptr) = 0;
@@ -105,8 +107,8 @@ public:
    */
 #ifdef HYU_EVAL_2 /* HYU_EVAL_2 */
   virtual rc_t Scan_eval(transaction *t, const varstr &start_key,
-                    const varstr *end_key, ScanCallback &callback,
-                    str_arena *arena, const int scan_flag) = 0;
+                         const varstr *end_key, ScanCallback &callback,
+                         str_arena *arena, const int scan_flag) = 0;
 #endif /* HYU_EVAL_2 */
   virtual rc_t Scan(transaction *t, const varstr &start_key,
                     const varstr *end_key, ScanCallback &callback,
@@ -134,14 +136,14 @@ public:
                  OID *inserted_oid);
 
 #ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
-	virtual void
-  GetOID(const varstr &key, rc_t &rc, TXN::xid_context *xc, OID &out_oid,
-				 next_key_info_t &next_key_info,
-         ConcurrentMasstree::versioned_node_t *out_sinfo = nullptr) = 0;
-#else /* HYU_ZIGZAG */
-  virtual void
-  GetOID(const varstr &key, rc_t &rc, TXN::xid_context *xc, OID &out_oid,
-         ConcurrentMasstree::versioned_node_t *out_sinfo = nullptr) = 0;
+  virtual void GetOID(
+      const varstr &key, rc_t &rc, TXN::xid_context *xc, OID &out_oid,
+      next_key_info_t &next_key_info,
+      ConcurrentMasstree::versioned_node_t *out_sinfo = nullptr) = 0;
+#else  /* HYU_ZIGZAG */
+  virtual void GetOID(
+      const varstr &key, rc_t &rc, TXN::xid_context *xc, OID &out_oid,
+      ConcurrentMasstree::versioned_node_t *out_sinfo = nullptr) = 0;
 #endif /* HYU_ZIGZAG */
 
   /**
@@ -157,9 +159,9 @@ class ConcurrentMasstreeIndex : public OrderedIndex {
   friend class sm_log_recover_impl;
   friend class sm_chkpt_mgr;
 
-private:
-	// [HYU] go public member
-  //ConcurrentMasstree masstree_;
+ private:
+  // [HYU] go public member
+  // ConcurrentMasstree masstree_;
 
   struct SearchRangeCallback {
     SearchRangeCallback(OrderedIndex::ScanCallback &upcall)
@@ -180,27 +182,26 @@ private:
     XctSearchRangeCallback(transaction *t, SearchRangeCallback *caller_callback)
         : t(t), caller_callback(caller_callback) {}
 
-    virtual void
-    on_resp_node(const typename ConcurrentMasstree::node_opaque_t *n,
-                 uint64_t version);
+    virtual void on_resp_node(
+        const typename ConcurrentMasstree::node_opaque_t *n, uint64_t version);
     virtual bool invoke(const ConcurrentMasstree *btr_ptr,
                         const typename ConcurrentMasstree::string_type &k,
                         dbtuple *v,
                         const typename ConcurrentMasstree::node_opaque_t *n,
                         uint64_t version);
 
-  private:
+   private:
     transaction *const t;
     SearchRangeCallback *const caller_callback;
   };
 
   struct PurgeTreeWalker : public ConcurrentMasstree::tree_walk_callback {
-    virtual void
-    on_node_begin(const typename ConcurrentMasstree::node_opaque_t *n);
+    virtual void on_node_begin(
+        const typename ConcurrentMasstree::node_opaque_t *n);
     virtual void on_node_success();
     virtual void on_node_failure();
 
-  private:
+   private:
     std::vector<std::pair<typename ConcurrentMasstree::value_type, bool>>
         spec_values;
   };
@@ -215,7 +216,7 @@ private:
                          const ConcurrentMasstree::node_opaque_t *node,
                          uint64_t version);
 
-public:
+ public:
   ConcurrentMasstree masstree_;
   ConcurrentMasstreeIndex(std::string name, const char *primary)
       : OrderedIndex(name, primary) {}
@@ -223,8 +224,9 @@ public:
   inline void *GetTable() override { return masstree_.get_table(); }
 
 #ifdef HYU_EVAL_2 /* HYU_EVAL_2 */
-  virtual void Get_eval(transaction *t, rc_t &rc, const varstr &key, varstr &value,
-                   int flag, OID *out_oid = nullptr) override;
+  virtual void Get_eval(transaction *t, rc_t &rc, const varstr &key,
+                        varstr &value, int flag,
+                        OID *out_oid = nullptr) override;
 #endif /* HYU_EVAL_2 */
   virtual void Get(transaction *t, rc_t &rc, const varstr &key, varstr &value,
                    OID *out_oid = nullptr) override;
@@ -244,8 +246,8 @@ public:
   }
 #ifdef HYU_EVAL_2 /* HYU_EVAL_2 */
   rc_t Scan_eval(transaction *t, const varstr &start_key, const varstr *end_key,
-            ScanCallback &callback, str_arena *arena,
-						const int scan_flag) override;
+                 ScanCallback &callback, str_arena *arena,
+                 const int scan_flag) override;
 #endif /* HYU_EVAL_2 */
   rc_t Scan(transaction *t, const varstr &start_key, const varstr *end_key,
             ScanCallback &callback, str_arena *arena) override;
@@ -257,36 +259,36 @@ public:
   std::map<std::string, uint64_t> Clear() override;
   inline void SetArrays() override { masstree_.set_arrays(descriptor_); }
 
-
 #ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
-  inline void
-  GetOID(const varstr &key, rc_t &rc, TXN::xid_context *xc, OID &out_oid,
-				 next_key_info_t &next_key_info,
-         ConcurrentMasstree::versioned_node_t *out_sinfo = nullptr) override {
-		OID next_oid;
-		Masstree::leaf<masstree_params>* next_leaf = nullptr;
-		Masstree::leaf<masstree_params>::permuter_type next_perm;
-		int next_ki;
-		bool found = masstree_.search_zigzag(key, out_oid, next_oid, &next_leaf,
-														next_perm, next_ki, xc->begin_epoch, out_sinfo);
-		if (found) {
-			next_key_info.oid = next_oid;
-			next_key_info.leaf = next_leaf;
-			next_key_info.perm = next_perm;
-			next_key_info.ki = next_ki;
-		}
+  inline void GetOID(
+      const varstr &key, rc_t &rc, TXN::xid_context *xc, OID &out_oid,
+      next_key_info_t &next_key_info,
+      ConcurrentMasstree::versioned_node_t *out_sinfo = nullptr) override {
+    OID next_oid;
+    Masstree::leaf<masstree_params> *next_leaf = nullptr;
+    Masstree::leaf<masstree_params>::permuter_type next_perm;
+    int next_ki;
+    bool found =
+        masstree_.search_zigzag(key, out_oid, next_oid, &next_leaf, next_perm,
+                                next_ki, xc->begin_epoch, out_sinfo);
+    if (found) {
+      next_key_info.oid = next_oid;
+      next_key_info.leaf = next_leaf;
+      next_key_info.perm = next_perm;
+      next_key_info.ki = next_ki;
+    }
     volatile_write(rc._val, found ? RC_TRUE : RC_FALSE);
   }
-#else /* HYU_ZIGZAG */
-  inline void
-  GetOID(const varstr &key, rc_t &rc, TXN::xid_context *xc, OID &out_oid,
-         ConcurrentMasstree::versioned_node_t *out_sinfo = nullptr) override {
+#else  /* HYU_ZIGZAG */
+  inline void GetOID(
+      const varstr &key, rc_t &rc, TXN::xid_context *xc, OID &out_oid,
+      ConcurrentMasstree::versioned_node_t *out_sinfo = nullptr) override {
     bool found = masstree_.search(key, out_oid, xc->begin_epoch, out_sinfo);
     volatile_write(rc._val, found ? RC_TRUE : RC_FALSE);
   }
 #endif /* HYU_ZIGZAG */
 
-private:
+ private:
   bool InsertIfAbsent(transaction *t, const varstr &key, OID oid) override;
 };
-} // namespace ermia
+}  // namespace ermia

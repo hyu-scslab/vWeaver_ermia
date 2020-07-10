@@ -13,7 +13,9 @@ struct YcsbRecord {
   char data_[kRecordSize];
 
   YcsbRecord() {}
-  YcsbRecord(char value) { memset(data_, value, kFields * kFieldLength * sizeof(char)); }
+  YcsbRecord(char value) {
+    memset(data_, value, kFields * kFieldLength * sizeof(char));
+  }
 
   char* get_field(uint32_t f) { return data_ + f * kFieldLength; }
   static void initialize_field(char* field) {
@@ -63,4 +65,4 @@ struct YcsbWorkload {
   bool distinct_keys_;
 };
 
-void BuildKey(uint64_t key, ermia::varstr &k);
+void BuildKey(uint64_t key, ermia::varstr& k);

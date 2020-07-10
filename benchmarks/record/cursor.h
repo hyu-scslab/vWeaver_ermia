@@ -1,8 +1,8 @@
 #pragma once
 
 #include <cstdint>
-#include "../macros.h"
 #include "../counter.h"
+#include "../macros.h"
 #include "../util.h"
 
 // cursors can only move forward, or reset completely

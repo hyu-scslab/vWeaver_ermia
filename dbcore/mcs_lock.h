@@ -57,10 +57,7 @@ struct mcs_lock {
     mcs_lock* _held;
   };
 #define MCS_EXT_QNODE_INITIALIZER \
-  {                               \
-    { 0, false, 0 }               \
-    , 0                           \
-  }
+  { {0, false, 0}, 0 }
   qnode* volatile _tail = 0;
   constexpr mcs_lock() : _tail(0) {}
 
@@ -131,9 +128,8 @@ struct mcs_lock {
     __sync_synchronize();
     qnode* next;
     if (!(next = me->_next)) {
-      if (me == _tail &&
-          me == (qnode*)__sync_val_compare_and_swap((char** volatile) & _tail,
-                                                    (char*)me, 0))
+      if (me == _tail && me == (qnode*)__sync_val_compare_and_swap(
+                                   (char** volatile) & _tail, (char*)me, 0))
         return;
       next = spin_on_next(me);
     }

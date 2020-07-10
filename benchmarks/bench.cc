@@ -1,18 +1,18 @@
-#include <iostream>
-#include <fstream>
-#include <sstream>
-#include <vector>
-#include <utility>
-#include <string>
-#include <string.h>
 #include <stdio.h>
+#include <string.h>
+#include <fstream>
+#include <iostream>
+#include <sstream>
+#include <string>
+#include <utility>
+#include <vector>
 
-#include <stdlib.h>
 #include <sched.h>
-#include <unistd.h>
+#include <stdlib.h>
 #include <sys/sysinfo.h>
 #include <sys/times.h>
 #include <sys/vtimes.h>
+#include <unistd.h>
 
 #include "bench.h"
 
@@ -21,8 +21,8 @@
 #include "../dbcore/sm-cmd-log.h"
 #include "../dbcore/sm-config.h"
 #include "../dbcore/sm-index.h"
-#include "../dbcore/sm-log.h"
 #include "../dbcore/sm-log-recover-impl.h"
+#include "../dbcore/sm-log.h"
 #include "../dbcore/sm-rep.h"
 
 uint64_t Q2_count = 0;
@@ -54,7 +54,8 @@ retry:
   }
 }
 
-bool bench_worker::finish_workload(rc_t ret, uint32_t workload_idx, util::timer &t) {
+bool bench_worker::finish_workload(rc_t ret, uint32_t workload_idx,
+                                   util::timer &t) {
   if (!ret.IsAbort()) {
     ++ntxn_commits;
     std::get<0>(txn_counts[workload_idx])++;
@@ -73,28 +74,29 @@ bool bench_worker::finish_workload(rc_t ret, uint32_t workload_idx, util::timer 
       std::get<2>(txn_counts[workload_idx])++;
     }
     switch (ret._val) {
-      case RC_ABORT_SERIAL:
-        inc_ntxn_serial_aborts();
-        break;
-      case RC_ABORT_SI_CONFLICT:
-        inc_ntxn_si_aborts();
-        break;
-      case RC_ABORT_RW_CONFLICT:
-        inc_ntxn_rw_aborts();
-        break;
-      case RC_ABORT_INTERNAL:
-        inc_ntxn_int_aborts();
-        break;
-      case RC_ABORT_PHANTOM:
-        inc_ntxn_phantom_aborts();
-        break;
-      case RC_ABORT_USER:
-        inc_ntxn_user_aborts();
-        break;
-      default:
-        ALWAYS_ASSERT(false);
+    case RC_ABORT_SERIAL:
+      inc_ntxn_serial_aborts();
+      break;
+    case RC_ABORT_SI_CONFLICT:
+      inc_ntxn_si_aborts();
+      break;
+    case RC_ABORT_RW_CONFLICT:
+      inc_ntxn_rw_aborts();
+      break;
+    case RC_ABORT_INTERNAL:
+      inc_ntxn_int_aborts();
+      break;
+    case RC_ABORT_PHANTOM:
+      inc_ntxn_phantom_aborts();
+      break;
+    case RC_ABORT_USER:
+      inc_ntxn_user_aborts();
+      break;
+    default:
+      ALWAYS_ASSERT(false);
     }
-    if (ermia::config::retry_aborted_transactions && !ret.IsUserAbort() && running) {
+    if (ermia::config::retry_aborted_transactions && !ret.IsUserAbort() &&
+        running) {
       if (ermia::config::backoff_aborted_transactions) {
         if (backoff_shifts < 63) backoff_shifts++;
         uint64_t spins = 1UL << backoff_shifts;
@@ -112,57 +114,57 @@ bool bench_worker::finish_workload(rc_t ret, uint32_t workload_idx, util::timer 
 
 void bench_worker::MyWork(char *) {
   if (is_worker) {
-		bool start_flag = false;
+    bool start_flag = false;
     workload = get_workload();
     txn_counts.resize(workload.size());
     barrier_a->count_down();
     barrier_b->wait_for();
     while (running) {
-			if (get_worker_id() == ermia::config::worker_threads) {
-				//printf("hi i'm worker %d\n", get_worker_id());
-				//if (start_flag == false) {
+      if (get_worker_id() == ermia::config::worker_threads) {
+        // printf("hi i'm worker %d\n", get_worker_id());
+        // if (start_flag == false) {
 #ifdef HYU_MOTIVATION /* HYU_MOTIVATION */
-				if (--Q2_count >= 0) {
-					do_workload_function(5);
-					//start_flag = true;
-				}
+        if (--Q2_count >= 0) {
+          do_workload_function(5);
+          // start_flag = true;
+        }
 #endif /* HYU_MOTIVATION */
-				continue;
-			}
+        continue;
+      }
 
 #ifdef HYU_EVAL_2 /* HYU_EVAL_2 */
-			if (!start_flag) {
-				// create version chain
-				do_workload_function(2);
-				// end
-				
-				// scan
-				do_workload_function(1);
-				// end
+      if (!start_flag) {
+        // create version chain
+        do_workload_function(2);
+        // end
+
+        // scan
+        do_workload_function(1);
+        // end
 #ifdef HYU_LONG_CHAIN /* HYU_LONG_CHAIN */
-				// create version chain
-				do_workload_function(2);
-				do_workload_function(2);
-				do_workload_function(2);
-				// end
-				
-				// scan
-				do_workload_function(1);
-				// end
+        // create version chain
+        do_workload_function(2);
+        do_workload_function(2);
+        do_workload_function(2);
+        // end
+
+        // scan
+        do_workload_function(1);
+        // end
 #endif /* HYU_LONG_CHAIN */
-				start_flag = true;
-			}
-			continue;
+        start_flag = true;
+      }
+      continue;
 #endif /* HYU_EVAL_2 */
 
       double d = r.next_uniform();
       for (size_t i = 0; i < workload.size(); i++) {
         if ((i + 1) == workload.size() || d < workload[i].frequency) {
 #ifdef HYU_MOTIVATION /* HYU_MOTIVATION */
-					if (!workload[i].name.compare("Query2")) {
-						__sync_fetch_and_add(&Q2_count, 1);
-						break;
-					}
+          if (!workload[i].name.compare("Query2")) {
+            __sync_fetch_and_add(&Q2_count, 1);
+            break;
+          }
 #endif /* HYU_MOTIVATION */
           do_workload_function(i);
           break;
@@ -174,17 +176,22 @@ void bench_worker::MyWork(char *) {
     cmdlog_redo_workload = get_cmdlog_redo_workload();
     txn_counts.resize(cmdlog_redo_workload.size());
     if (ermia::config::replay_policy == ermia::config::kReplayBackground) {
-      ermia::CommandLog::cmd_log->BackgroundReplay(worker_id,
-        std::bind(&bench_worker::do_cmdlog_redo_workload_function, this, std::placeholders::_1, std::placeholders::_2));
+      ermia::CommandLog::cmd_log->BackgroundReplay(
+          worker_id,
+          std::bind(&bench_worker::do_cmdlog_redo_workload_function, this,
+                    std::placeholders::_1, std::placeholders::_2));
     } else if (ermia::config::replay_policy != ermia::config::kReplayNone) {
-      ermia::CommandLog::cmd_log->BackupRedo(worker_id,
-        std::bind(&bench_worker::do_cmdlog_redo_workload_function, this, std::placeholders::_1, std::placeholders::_2));
+      ermia::CommandLog::cmd_log->BackupRedo(
+          worker_id,
+          std::bind(&bench_worker::do_cmdlog_redo_workload_function, this,
+                    std::placeholders::_1, std::placeholders::_2));
     }
   }
 }
 
 void bench_runner::create_files_task(char *) {
-  ALWAYS_ASSERT(!ermia::sm_log::need_recovery && !ermia::config::is_backup_srv());
+  ALWAYS_ASSERT(!ermia::sm_log::need_recovery &&
+                !ermia::config::is_backup_srv());
   // Allocate an FID for each index, set 2nd indexes to use
   // the primary index's record FID/array
   ASSERT(ermia::logmgr);
@@ -221,12 +228,14 @@ void bench_runner::run() {
   }
 
   if (ermia::config::worker_threads ||
-      (ermia::config::is_backup_srv() && ermia::config::replay_threads && ermia::config::command_log)) {
+      (ermia::config::is_backup_srv() && ermia::config::replay_threads &&
+       ermia::config::command_log)) {
     // Get a thread to use benchmark-provided prepare(), which gathers
     // information about index pointers created by create_file_task.
     ermia::thread::Thread::Task runner_task =
-      std::bind(&bench_runner::prepare, this, std::placeholders::_1);
-    ermia::thread::Thread *runner_thread = ermia::thread::GetThread(true /* physical */);
+        std::bind(&bench_runner::prepare, this, std::placeholders::_1);
+    ermia::thread::Thread *runner_thread =
+        ermia::thread::GetThread(true /* physical */);
     runner_thread->StartTask(runner_task);
     runner_thread->Join();
     ermia::thread::PutThread(runner_thread);
@@ -266,7 +275,8 @@ void bench_runner::run() {
       }
     }
     ermia::RCU::rcu_enter();
-    ermia::volatile_write(ermia::MM::safesnap_lsn, ermia::logmgr->cur_lsn().offset());
+    ermia::volatile_write(ermia::MM::safesnap_lsn,
+                          ermia::logmgr->cur_lsn().offset());
     ALWAYS_ASSERT(ermia::MM::safesnap_lsn);
 
     // Persist the database
@@ -284,9 +294,12 @@ void bench_runner::run() {
         ermia::config::replay_policy != ermia::config::kReplayNone &&
         ermia::config::replay_threads) {
       cmdlog_redoers = make_cmdlog_redoers();
-      ermia::CommandLog::redoer_barrier = new spin_barrier(ermia::config::replay_threads);
+      ermia::CommandLog::redoer_barrier =
+          new spin_barrier(ermia::config::replay_threads);
       if (ermia::config::replay_policy == ermia::config::kReplayBackground) {
-        std::thread bg(&ermia::CommandLog::CommandLogManager::BackgroundReplayDaemon, ermia::CommandLog::cmd_log);
+        std::thread bg(
+            &ermia::CommandLog::CommandLogManager::BackgroundReplayDaemon,
+            ermia::CommandLog::cmd_log);
         bg.detach();
       }
       for (auto &r : cmdlog_redoers) {
@@ -322,7 +335,8 @@ void bench_runner::run() {
     if (ermia::config::enable_chkpt) {
       ermia::chkptmgr->start_chkpt_thread();
     }
-    ermia::volatile_write(ermia::config::state, ermia::config::kStateForwardProcessing);
+    ermia::volatile_write(ermia::config::state,
+                          ermia::config::kStateForwardProcessing);
   }
 
   // Start a thread that dumps read view LSN
@@ -347,7 +361,8 @@ void bench_runner::run() {
     std::cerr << "Shutdown successfully" << std::endl;
   }
 
-  if (ermia::config::is_backup_srv() && ermia::config::command_log && cmdlog_redoers.size()) {
+  if (ermia::config::is_backup_srv() && ermia::config::command_log &&
+      cmdlog_redoers.size()) {
     tx_stat_map agg = cmdlog_redoers[0]->get_cmdlog_txn_counts();
     for (size_t i = 1; i < cmdlog_redoers.size(); i++) {
       cmdlog_redoers[i]->Join();
@@ -361,7 +376,7 @@ void bench_runner::run() {
     }
 #ifndef __clang__
     std::cerr << "cmdlog txn breakdown: "
-      << util::format_list(agg.begin(), agg.end()) << std::endl;
+              << util::format_list(agg.begin(), agg.end()) << std::endl;
 #endif
   }
   if (ermia::config::read_view_stat_interval_ms) {
@@ -372,7 +387,8 @@ void bench_runner::run() {
 void bench_runner::measure_read_view_lsn() {
   ermia::RCU::rcu_register();
   DEFER(ermia::RCU::rcu_deregister());
-  std::ofstream out_file(ermia::config::read_view_stat_file, std::ios::out | std::ios::trunc);
+  std::ofstream out_file(ermia::config::read_view_stat_file,
+                         std::ios::out | std::ios::trunc);
   LOG_IF(FATAL, !out_file.is_open()) << "Read view stat file not open";
   DEFER(out_file.close());
   out_file << "Time,LSN,DLSN" << std::endl;
@@ -397,7 +413,7 @@ void bench_runner::measure_read_view_lsn() {
 
 void bench_runner::start_measurement() {
 #ifdef HYU_MOTIVATION /* HYU_MOTIVATION */
-	FILE* fp = fopen("throughput.data", "a+");
+  FILE *fp = fopen("throughput.data", "a+");
 #endif /* HYU_MOTIVATION */
   workers = make_workers();
   ALWAYS_ASSERT(!workers.empty());
@@ -412,7 +428,8 @@ void bench_runner::start_measurement() {
   barrier_a.wait_for();  // wait for all threads to start up
   std::map<std::string, size_t> table_sizes_before;
   if (ermia::config::verbose) {
-    for (std::map<std::string, ermia::OrderedIndex *>::iterator it = open_tables.begin();
+    for (std::map<std::string, ermia::OrderedIndex *>::iterator it =
+             open_tables.begin();
          it != open_tables.end(); ++it) {
       const size_t s = it->second->Size();
       std::cerr << "table " << it->first << " size " << s << std::endl;
@@ -427,7 +444,7 @@ void bench_runner::start_measurement() {
 
   // Print CPU utilization as well. Code adapted from:
   // https://stackoverflow.com/questions/63166/how-to-determine-cpu-and-memory-consumption-from-inside-a-process
-  FILE* file;
+  FILE *file;
   struct tms timeSample;
   char line[128];
 
@@ -447,12 +464,11 @@ void bench_runner::start_measurement() {
 
     now = times(&timeSample);
     if (now <= lastCPU || timeSample.tms_stime < lastSysCPU ||
-      timeSample.tms_utime < lastUserCPU){
+        timeSample.tms_utime < lastUserCPU) {
       percent = -1.0;
-    }
-    else{
+    } else {
       percent = (timeSample.tms_stime - lastSysCPU) +
-      (timeSample.tms_utime - lastUserCPU);
+                (timeSample.tms_utime - lastUserCPU);
       percent /= (now - lastCPU);
       percent /= nprocs;
       percent *= 100;
@@ -493,7 +509,8 @@ void bench_runner::start_measurement() {
     if (ermia::config::print_cpu_util) {
       sec_util = get_cpu_util();
       total_util += sec_util;
-      printf("%lu,%lu,%lu,%.2f%%\n", slept + 1, sec_commits, sec_aborts, sec_util);
+      printf("%lu,%lu,%lu,%.2f%%\n", slept + 1, sec_commits, sec_aborts,
+             sec_util);
     } else {
       printf("%lu,%lu,%lu\n", slept + 1, sec_commits, sec_aborts);
 #ifdef HYU_MOTIVATION /* HYU_MOTIVATION */
@@ -592,7 +609,9 @@ void bench_runner::start_measurement() {
   uint64_t agg_redo_batches = 0;
   uint64_t agg_redo_size = 0;
   if (ermia::config::is_backup_srv() && ermia::config::log_ship_offset_replay) {
-    ermia::parallel_offset_replay *f = (ermia::parallel_offset_replay *)ermia::logmgr->get_backup_replay_functor();
+    ermia::parallel_offset_replay *f =
+        (ermia::parallel_offset_replay *)
+            ermia::logmgr->get_backup_replay_functor();
     if (f) {
       for (auto &r : f->redoers) {
         if (agg_latency_us < r->redo_latency_us) {
@@ -621,7 +640,8 @@ void bench_runner::start_measurement() {
 
   if (ermia::config::verbose) {
     std::cerr << "--- table statistics ---" << std::endl;
-    for (std::map<std::string, ermia::OrderedIndex *>::iterator it = open_tables.begin();
+    for (std::map<std::string, ermia::OrderedIndex *>::iterator it =
+             open_tables.begin();
          it != open_tables.end(); ++it) {
       const size_t s = it->second->Size();
       const ssize_t delta = ssize_t(s) - ssize_t(table_sizes_before[it->first]);
@@ -634,56 +654,65 @@ void bench_runner::start_measurement() {
     std::cerr << "--- benchmark statistics ---" << std::endl;
     std::cerr << "runtime: " << elapsed_sec << " sec" << std::endl;
     std::cerr << "cpu_util: " << total_util / elapsed_sec << "%" << std::endl;
-    std::cerr << "agg_nosync_throughput: " << agg_nosync_throughput << " ops/sec"
-         << std::endl;
-    std::cerr << "avg_nosync_per_core_throughput: " << avg_nosync_per_core_throughput
-         << " ops/sec/core" << std::endl;
-    std::cerr << "agg_throughput: " << agg_throughput << " ops/sec" << std::endl;
+    std::cerr << "agg_nosync_throughput: " << agg_nosync_throughput
+              << " ops/sec" << std::endl;
+    std::cerr << "avg_nosync_per_core_throughput: "
+              << avg_nosync_per_core_throughput << " ops/sec/core" << std::endl;
+    std::cerr << "agg_throughput: " << agg_throughput << " ops/sec"
+              << std::endl;
     std::cerr << "avg_per_core_throughput: " << avg_per_core_throughput
-         << " ops/sec/core" << std::endl;
+              << " ops/sec/core" << std::endl;
     std::cerr << "avg_latency: " << avg_latency_ms << " ms" << std::endl;
-    std::cerr << "agg_abort_rate: " << agg_abort_rate << " aborts/sec" << std::endl;
+    std::cerr << "agg_abort_rate: " << agg_abort_rate << " aborts/sec"
+              << std::endl;
     std::cerr << "avg_per_core_abort_rate: " << avg_per_core_abort_rate
-         << " aborts/sec/core" << std::endl;
+              << " aborts/sec/core" << std::endl;
 #ifndef __clang__
-    std::cerr << "txn breakdown: " << util::format_list(agg_txn_counts.begin(),
-                                                   agg_txn_counts.end()) << std::endl;
+    std::cerr << "txn breakdown: "
+              << util::format_list(agg_txn_counts.begin(), agg_txn_counts.end())
+              << std::endl;
 #endif
     if (ermia::config::is_backup_srv()) {
-      std::cerr << "agg_replay_time: " << agg_replay_latency_ms << " ms" << std::endl;
+      std::cerr << "agg_replay_time: " << agg_replay_latency_ms << " ms"
+                << std::endl;
       std::cerr << "agg_redo_batches: " << agg_redo_batches << std::endl;
-      std::cerr << "ms_per_redo_batch: " << agg_replay_latency_ms / (double)agg_redo_batches << std::endl;
+      std::cerr << "ms_per_redo_batch: "
+                << agg_replay_latency_ms / (double)agg_redo_batches
+                << std::endl;
       std::cerr << "agg_redo_size: " << agg_redo_size << " bytes" << std::endl;
     }
   }
 
   // output for plotting script
   std::cout << "---------------------------------------\n";
-  std::cout << agg_throughput << " commits/s, "
-       //       << avg_latency_ms << " "
-       << agg_abort_rate << " total_aborts/s, " << agg_system_abort_rate
-       << " system_aborts/s, " << agg_user_abort_rate << " user_aborts/s, "
-       << agg_int_abort_rate << " internal aborts/s, " << agg_si_abort_rate
-       << " si_aborts/s, " << agg_serial_abort_rate << " serial_aborts/s, "
-       << agg_rw_abort_rate << " rw_aborts/s, " << agg_phantom_abort_rate
-       << " phantom aborts/s." << std::endl;
-  std::cout << n_commits << " commits, " << n_query_commits << " query_commits, "
-       << n_aborts << " total_aborts, " << n_aborts - n_user_aborts
-       << " system_aborts, " << n_user_aborts << " user_aborts, "
-       << n_int_aborts << " internal_aborts, " << n_si_aborts << " si_aborts, "
-       << n_serial_aborts << " serial_aborts, " << n_rw_aborts << " rw_aborts, "
-       << n_phantom_aborts << " phantom_aborts" << std::endl;
+  std::cout << agg_throughput
+            << " commits/s, "
+            //       << avg_latency_ms << " "
+            << agg_abort_rate << " total_aborts/s, " << agg_system_abort_rate
+            << " system_aborts/s, " << agg_user_abort_rate << " user_aborts/s, "
+            << agg_int_abort_rate << " internal aborts/s, " << agg_si_abort_rate
+            << " si_aborts/s, " << agg_serial_abort_rate << " serial_aborts/s, "
+            << agg_rw_abort_rate << " rw_aborts/s, " << agg_phantom_abort_rate
+            << " phantom aborts/s." << std::endl;
+  std::cout << n_commits << " commits, " << n_query_commits
+            << " query_commits, " << n_aborts << " total_aborts, "
+            << n_aborts - n_user_aborts << " system_aborts, " << n_user_aborts
+            << " user_aborts, " << n_int_aborts << " internal_aborts, "
+            << n_si_aborts << " si_aborts, " << n_serial_aborts
+            << " serial_aborts, " << n_rw_aborts << " rw_aborts, "
+            << n_phantom_aborts << " phantom_aborts" << std::endl;
 
   std::cout << "---------------------------------------\n";
   for (auto &c : agg_txn_counts) {
     std::cout << c.first << "\t" << std::get<0>(c.second) / (double)elapsed_sec
-         << " commits/s\t" << std::get<1>(c.second) / (double)elapsed_sec
-         << " aborts/s\t" << std::get<2>(c.second) / (double)elapsed_sec
-         << " system aborts/s\t" << std::get<3>(c.second) / (double)elapsed_sec
-         << " user aborts/s\n";
+              << " commits/s\t" << std::get<1>(c.second) / (double)elapsed_sec
+              << " aborts/s\t" << std::get<2>(c.second) / (double)elapsed_sec
+              << " system aborts/s\t"
+              << std::get<3>(c.second) / (double)elapsed_sec
+              << " user aborts/s\n";
   }
 #ifdef HYU_MOTIVATION /* HYU_MOTIVATION */
-	fclose(fp);
+  fclose(fp);
 #endif /* HYU_MOTIVATION */
   std::cout.flush();
 }

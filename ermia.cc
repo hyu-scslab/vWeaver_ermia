@@ -84,12 +84,12 @@ void Engine::CreateTable(uint16_t index_type, const char *name,
 
 #ifdef HYU_EVAL_2 /* HYU_EVAL_2 */
 rc_t ConcurrentMasstreeIndex::Scan_eval(transaction *t, const varstr &start_key,
-                                   const varstr *end_key,
-                                   ScanCallback &callback, str_arena *arena,
-																	 const int scan_flag) {
+                                        const varstr *end_key,
+                                        ScanCallback &callback,
+                                        str_arena *arena, const int scan_flag) {
   MARK_REFERENCED(arena);
   SearchRangeCallback c(callback);
-	
+
   ASSERT(c.return_code._val == RC_FALSE);
 
   t->ensure_active();
@@ -110,8 +110,8 @@ rc_t ConcurrentMasstreeIndex::Scan_eval(transaction *t, const varstr &start_key,
     if (end_key) {
       uppervk = *end_key;
     }
-    masstree_.search_range_call_eval(start_key, end_key ? &uppervk : nullptr, cb,
-                                t->xc, scan_flag);
+    masstree_.search_range_call_eval(start_key, end_key ? &uppervk : nullptr,
+                                     cb, t->xc, scan_flag);
   }
   return c.return_code;
 }
@@ -121,7 +121,7 @@ rc_t ConcurrentMasstreeIndex::Scan(transaction *t, const varstr &start_key,
                                    ScanCallback &callback, str_arena *arena) {
   MARK_REFERENCED(arena);
   SearchRangeCallback c(callback);
-	
+
   ASSERT(c.return_code._val == RC_FALSE);
 
   t->ensure_active();
@@ -180,8 +180,9 @@ std::map<std::string, uint64_t> ConcurrentMasstreeIndex::Clear() {
 }
 
 #ifdef HYU_EVAL_2 /* HYU_EVAL_2 */
-void ConcurrentMasstreeIndex::Get_eval(transaction *t, rc_t &rc, const varstr &key,
-                                  varstr &value, int flag, OID *out_oid) {
+void ConcurrentMasstreeIndex::Get_eval(transaction *t, rc_t &rc,
+                                       const varstr &key, varstr &value,
+                                       int flag, OID *out_oid) {
   OID oid = 0;
   rc = {RC_INVALID};
   ConcurrentMasstree::versioned_node_t sinfo;
@@ -202,13 +203,13 @@ void ConcurrentMasstreeIndex::Get_eval(transaction *t, rc_t &rc, const varstr &k
             descriptor_->GetTupleArray(),
             descriptor_->GetPersistentAddressArray(), oid, t->xc);
       } else {
-				if (flag == 0) { //vanilla
-					tuple =
-							oidmgr->oid_get_version_eval_stack(descriptor_->GetTupleArray(), oid, t->xc);
-				} else {
-					tuple = 
-							oidmgr->oid_get_version_eval(descriptor_->GetTupleArray(), oid, t->xc);
-				}
+        if (flag == 0) {  // vanilla
+          tuple = oidmgr->oid_get_version_eval_stack(
+              descriptor_->GetTupleArray(), oid, t->xc);
+        } else {
+          tuple = oidmgr->oid_get_version_eval(descriptor_->GetTupleArray(),
+                                               oid, t->xc);
+        }
       }
       if (!tuple) {
         found = false;
@@ -251,8 +252,8 @@ void ConcurrentMasstreeIndex::Get(transaction *t, rc_t &rc, const varstr &key,
 
     dbtuple *tuple = nullptr;
 #ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
-		//dbtuple *zigzag_tuple = nullptr;
-#endif /* HYU_ZIGZAG */
+                  // dbtuple *zigzag_tuple = nullptr;
+#endif            /* HYU_ZIGZAG */
     if (found) {
       // Key-OID mapping exists, now try to get the actual tuple to be sure
       if (config::is_backup_srv()) {
@@ -260,29 +261,32 @@ void ConcurrentMasstreeIndex::Get(transaction *t, rc_t &rc, const varstr &key,
             descriptor_->GetTupleArray(),
             descriptor_->GetPersistentAddressArray(), oid, t->xc);
       } else {
-retry_get:
-				uint64_t point_cnt = 0;
-				uint64_t zigzag_cnt = 0;
+      retry_get:
+        uint64_t point_cnt = 0;
+        uint64_t zigzag_cnt = 0;
 #ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
-				tuple =
-#ifdef HYU_DEBUG /* HYU_DEBUG */
-						oidmgr->oid_get_version_zigzag_debug(descriptor_->GetTupleArray(), oid, t->xc, &zigzag_cnt);
-#else /* HYU_DEBUG */
-						oidmgr->oid_get_version_zigzag(descriptor_->GetTupleArray(), oid, t->xc);
-#endif /* HYU_DEBUG */
-
-#else /* HYU_ZIGZAG */
         tuple =
 #ifdef HYU_DEBUG /* HYU_DEBUG */
-            oidmgr->oid_get_version_debug(descriptor_->GetTupleArray(), oid, t->xc, &point_cnt);
-#else /* HYU_DEBUG */
-            oidmgr->oid_get_version(descriptor_->GetTupleArray(), oid, t->xc);
+            oidmgr->oid_get_version_zigzag_debug(descriptor_->GetTupleArray(),
+                                                 oid, t->xc, &zigzag_cnt);
+#else  /* HYU_DEBUG */
+            oidmgr->oid_get_version_zigzag(descriptor_->GetTupleArray(), oid,
+                                           t->xc);
 #endif /* HYU_DEBUG */
-				//if (tuple != zigzag_tuple) {
-				//	printf("[HYU] scan fail in GET\n");
-				//	goto retry_get;
-				//}
-#endif /* HYU_ZIGZAG */
+
+#else            /* HYU_ZIGZAG */
+        tuple =
+#ifdef HYU_DEBUG /* HYU_DEBUG */
+            oidmgr->oid_get_version_debug(descriptor_->GetTupleArray(), oid,
+                                          t->xc, &point_cnt);
+#else            /* HYU_DEBUG */
+            oidmgr->oid_get_version(descriptor_->GetTupleArray(), oid, t->xc);
+#endif           /* HYU_DEBUG */
+        // if (tuple != zigzag_tuple) {
+        //	printf("[HYU] scan fail in GET\n");
+        //	goto retry_get;
+        //}
+#endif           /* HYU_ZIGZAG */
       }
       if (!tuple) {
         found = false;
@@ -379,18 +383,18 @@ rc_t ConcurrentMasstreeIndex::DoTreePut(transaction &t, const varstr *k,
   rc_t rc = {RC_INVALID};
 #ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
 
-	next_key_info_t next_key_info;
-	GetOID(*k, rc, t.xc, oid, next_key_info);
-  
-	if (rc._val == RC_TRUE) {
+  next_key_info_t next_key_info;
+  GetOID(*k, rc, t.xc, oid, next_key_info);
+
+  if (rc._val == RC_TRUE) {
     return t.Update(descriptor_, oid, k, v, next_key_info);
   } else {
     return rc_t{RC_ABORT_INTERNAL};
   }
-#else /* HYU_ZIGZAG */
+#else  /* HYU_ZIGZAG */
   GetOID(*k, rc, t.xc, oid);
-  
-	if (rc._val == RC_TRUE) {
+
+  if (rc._val == RC_TRUE) {
     return t.Update(descriptor_, oid, k, v);
   } else {
     return rc_t{RC_ABORT_INTERNAL};
@@ -452,8 +456,8 @@ bool ConcurrentMasstreeIndex::XctSearchRangeCallback::invoke(
     // ^^^^^ note: see masstree_scan.hh, whose scan() calls
     // visit_value(), which calls this function to determine
     // if it should stop reading.
-    return false; // don't continue the read if the tx should abort
+    return false;  // don't continue the read if the tx should abort
   }
   return true;
 }
-} // namespace ermia
+}  // namespace ermia

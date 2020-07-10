@@ -63,7 +63,7 @@ struct serializer {
 
   static inline const uint8_t *read(const uint8_t *buf, T *obj) {
     const T *p = (const T *)buf;
-    //T *p = (T *)buf;
+    // T *p = (T *)buf;
     *obj = *p;
     return (const uint8_t *)(p + 1);
   }

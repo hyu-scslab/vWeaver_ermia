@@ -93,7 +93,8 @@ dynarray::~dynarray() {
   if (not _capacity) return;
 
   int err = munmap(_data, capacity());
-  LOG_IF(FATAL, err) << "Unable to unmap " << capacity() << " bytes starting at " << _data;
+  LOG_IF(FATAL, err) << "Unable to unmap " << capacity()
+                     << " bytes starting at " << _data;
 }
 
 dynarray::dynarray(dynarray &&victim) noexcept : dynarray() {

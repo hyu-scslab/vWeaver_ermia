@@ -357,40 +357,40 @@ retry:
   // raced?
   auto tmp2 = volatile_read(state->begin);
   switch (tmp2 - tmp) {
-    case 0:
-      // no race!
-      break;
+  case 0:
+    // no race!
+    break;
 
-    case 1:
-      /* Our epoch is now cooling. This is normally harmless,
-         because the transition to "cold" is guaranteed to notice
-         and flag us as a straggler if we haven't finished by then.
+  case 1:
+    /* Our epoch is now cooling. This is normally harmless,
+       because the transition to "cold" is guaranteed to notice
+       and flag us as a straggler if we haven't finished by then.
 
-         There is one danger, though: if no other threads were
-         active when the epoch changed, our epoch might go straight
-         from "active" to "dead" and be reclaimed. We have no way to
-         detect if this happens; instead, forbid the epoch change
-         routine from reclaiming a just-closed epoch directly.
-      */
-      break;
+       There is one danger, though: if no other threads were
+       active when the epoch changed, our epoch might go straight
+       from "active" to "dead" and be reclaimed. We have no way to
+       detect if this happens; instead, forbid the epoch change
+       routine from reclaiming a just-closed epoch directly.
+    */
+    break;
 
-    case 2:
-      /* Our epoch is now cold, or becoming so. We want to bail out
-         rather than contribute to the straggler problem, but the
-         epoch change routine may have already noticed. If so, run
-         the straggler protocol before retrying.
-       */
-      volatile_write(self->end, tmp2);
-      straggler_check(this, self, tmp2);
-      goto retry;
+  case 2:
+    /* Our epoch is now cold, or becoming so. We want to bail out
+       rather than contribute to the straggler problem, but the
+       epoch change routine may have already noticed. If so, run
+       the straggler protocol before retrying.
+     */
+    volatile_write(self->end, tmp2);
+    straggler_check(this, self, tmp2);
+    goto retry;
 
-    default:
-      /* We were so slow that the epoch change machinery doesn't
-         even consider us a threat. Just retry and hope we're faster
-         next time.
-       */
-      volatile_write(self->end, tmp2);
-      goto retry;
+  default:
+    /* We were so slow that the epoch change machinery doesn't
+       even consider us a threat. Just retry and hope we're faster
+       next time.
+     */
+    volatile_write(self->end, tmp2);
+    goto retry;
   }
 
   // FIXME(tzwang): 20161104: Like previous mentioned, we might be

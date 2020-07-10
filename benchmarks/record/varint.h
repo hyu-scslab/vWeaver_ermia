@@ -8,7 +8,7 @@ inline const uint8_t *read_uvint32_slow(const uint8_t *buf, uint32_t *value) {
   const uint8_t *p;
   uint32_t b, result;
 
-	// [HYU] default is likely in if statement
+  // [HYU] default is likely in if statement
   p = buf;
 
   b = *p++;
@@ -27,8 +27,8 @@ inline const uint8_t *read_uvint32_slow(const uint8_t *buf, uint32_t *value) {
   result |= b << 28;
   if (likely(b < 0x80)) goto done;
 
-	// [HYU] evade assertion
-	return NULL;
+  // [HYU] evade assertion
+  return NULL;
   ALWAYS_ASSERT(false);  // should not reach here (improper encoding)
 
 done:
@@ -42,8 +42,7 @@ done:
  *
  * Assumes buf points to a well encoded varint
  */
-ALWAYS_INLINE const uint8_t *read_uvint32(const uint8_t *buf,
-                                                 uint32_t *value) {
+ALWAYS_INLINE const uint8_t *read_uvint32(const uint8_t *buf, uint32_t *value) {
   if (likely(*buf < 0x80)) {
     *value = *buf;
     return buf + 1;
@@ -86,8 +85,8 @@ done:
 }
 
 ALWAYS_INLINE const uint8_t *failsafe_read_uvint32(const uint8_t *stream,
-                                                          size_t nbytes,
-                                                          uint32_t *value) {
+                                                   size_t nbytes,
+                                                   uint32_t *value) {
   if (unlikely(!nbytes)) return nullptr;
   const uint8_t ch = *stream;
   if (likely(ch < 0x80)) {
@@ -115,8 +114,8 @@ ALWAYS_INLINE size_t skip_uvint32(const uint8_t *stream, uint8_t *rawv) {
   return 0;
 }
 
-ALWAYS_INLINE size_t
-failsafe_skip_uvint32(const uint8_t *stream, size_t nbytes, uint8_t *rawv) {
+ALWAYS_INLINE size_t failsafe_skip_uvint32(const uint8_t *stream, size_t nbytes,
+                                           uint8_t *rawv) {
   if (rawv) {
     if (unlikely(!nbytes--)) return 0;
     if (likely((rawv[0] = stream[0]) < 0x80)) return 1;

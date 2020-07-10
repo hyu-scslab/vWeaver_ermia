@@ -1,13 +1,13 @@
 #pragma once
 
 #include <set>
-#include <vector>
-#include <utility>
 #include <string>
+#include <utility>
+#include <vector>
 
+#include "../dbcore/sm-log-alloc.h"
 #include "../ermia.h"
 #include "../util.h"
-#include "../dbcore/sm-log-alloc.h"
 
 extern void ycsb_do_test(ermia::Engine *db, int argc, char **argv);
 extern void tpcc_do_test(ermia::Engine *db, int argc, char **argv);
@@ -36,8 +36,10 @@ class bench_loader : public ermia::thread::Runner {
   bench_loader(unsigned long seed, ermia::Engine *db,
                const std::map<std::string, ermia::OrderedIndex *> &open_tables,
                uint32_t loader_id = 0)
-      : Runner(loader_id < ermia::config::threads ? true : false)
-      , r(seed), db(db), open_tables(open_tables) {
+      : Runner(loader_id < ermia::config::threads ? true : false),
+        r(seed),
+        db(db),
+        open_tables(open_tables) {
     // don't try_instantiate() here; do it when we start to load. The way we
     // reuse
     // threads relies on this fact (see bench_runner::run()).
@@ -69,9 +71,13 @@ class bench_worker : public ermia::thread::Runner {
 
  public:
   bench_worker(unsigned int worker_id, bool is_worker, unsigned long seed,
-               ermia::Engine *db, const std::map<std::string, ermia::OrderedIndex *> &open_tables,
-               spin_barrier *barrier_a = nullptr, spin_barrier *barrier_b = nullptr)
-      : Runner(ermia::config::physical_workers_only ? true : (worker_id >= ermia::config::worker_threads / 2)),
+               ermia::Engine *db,
+               const std::map<std::string, ermia::OrderedIndex *> &open_tables,
+               spin_barrier *barrier_a = nullptr,
+               spin_barrier *barrier_b = nullptr)
+      : Runner(ermia::config::physical_workers_only
+                   ? true
+                   : (worker_id >= ermia::config::worker_threads / 2)),
         worker_id(worker_id),
         is_worker(is_worker),
         r(seed),
@@ -94,7 +100,8 @@ class bench_worker : public ermia::thread::Runner {
         ntxn_query_commits(0) {
     txn_obj_buf = (ermia::transaction *)malloc(sizeof(ermia::transaction));
     if (ermia::config::numa_spread) {
-      LOG(INFO) << "Worker " << worker_id << " going to node " << worker_id % ermia::config::numa_nodes;
+      LOG(INFO) << "Worker " << worker_id << " going to node "
+                << worker_id % ermia::config::numa_nodes;
       TryImpersonate(worker_id % ermia::config::numa_nodes);
     } else {
       TryImpersonate();
@@ -107,7 +114,7 @@ class bench_worker : public ermia::thread::Runner {
   struct cmdlog_redo_workload_desc {
     cmdlog_redo_workload_desc() {}
     cmdlog_redo_workload_desc(const std::string &name, cmdlog_redo_fn_t fn)
-      : name(name), fn(fn) {}
+        : name(name), fn(fn) {}
     std::string name;
     cmdlog_redo_fn_t fn;
   };
@@ -148,8 +155,8 @@ class bench_worker : public ermia::thread::Runner {
   inline void inc_ntxn_int_aborts() { ++ntxn_int_aborts; }
   inline void inc_ntxn_phantom_aborts() { ++ntxn_phantom_aborts; }
   inline void inc_ntxn_query_commits() { ++ntxn_query_commits; }
-	// for HYU
-	inline unsigned int get_worker_id() { return worker_id; }
+  // for HYU
+  inline unsigned int get_worker_id() { return worker_id; }
 
   inline uint64_t get_latency_numer_us() const {
     return ermia::volatile_read(latency_numer_us);
@@ -210,7 +217,8 @@ class bench_runner {
 
   bench_runner(ermia::Engine *db)
       : db(db),
-        barrier_a(ermia::config::worker_threads + 1),		// default worker_threads (+1)
+        barrier_a(ermia::config::worker_threads +
+                  1),  // default worker_threads (+1)
         barrier_b(ermia::config::worker_threads > 0 ? 1 : 0) {}
   virtual ~bench_runner() {}
   virtual void prepare(char *) = 0;
@@ -249,7 +257,8 @@ class limit_callback : public ermia::OrderedIndex::ScanCallback {
     ALWAYS_ASSERT(limit == -1 || limit > 0);
   }
 
-  virtual bool Invoke(const char *keyp, size_t keylen, const ermia::varstr &value) {
+  virtual bool Invoke(const char *keyp, size_t keylen,
+                      const ermia::varstr &value) {
     ASSERT(limit == -1 || n < size_t(limit));
     values.emplace_back(ermia::varstr(keyp, keylen), value);
     return (limit == -1) || (++n < size_t(limit));
@@ -266,57 +275,57 @@ class limit_callback : public ermia::OrderedIndex::ScanCallback {
 
 // Note: try_catch_cond_abort might call __abort_txn with rc=RC_FALSE
 // so no need to assure rc must be RC_ABORT_*.
-#define __abort_txn(r)                            \
-{                                                 \
-  db->Abort(txn);                                 \
-  if (!r.IsAbort()) return {RC_ABORT_USER};       \
-  return r;                                       \
-}
+#define __abort_txn(r)                        \
+  {                                           \
+    db->Abort(txn);                           \
+    if (!r.IsAbort()) return {RC_ABORT_USER}; \
+    return r;                                 \
+  }
 
 // NOTE: only use these in transaction benchmark (e.g., TPCC) code, not in
 // engine code
 
 // reminescent the try...catch block:
 // if return code is one of those RC_ABORT* then abort
-#define TryCatch(rc)               \
-{                                  \
-  rc_t r = rc;                     \
-  if (r.IsAbort()) __abort_txn(r); \
-}
+#define TryCatch(rc)                 \
+  {                                  \
+    rc_t r = rc;                     \
+    if (r.IsAbort()) __abort_txn(r); \
+  }
 
 // same as TryCatch but don't do abort, only return rc
 // So far the only user is TPC-E's TxnHarness***.h.
-#define TryReturn(rc)        \
-{                            \
-  rc_t r = rc;               \
-  if (r.IsAbort()) return r; \
-}
+#define TryReturn(rc)          \
+  {                            \
+    rc_t r = rc;               \
+    if (r.IsAbort()) return r; \
+  }
 
 // if rc == RC_FALSE then do op
-#define TryCatchCond(rc, op)       \
-{                                  \
-  rc_t r = rc;                     \
-  if (r.IsAbort()) __abort_txn(r); \
-  if (r._val == RC_FALSE) op;      \
-}
+#define TryCatchCond(rc, op)         \
+  {                                  \
+    rc_t r = rc;                     \
+    if (r.IsAbort()) __abort_txn(r); \
+    if (r._val == RC_FALSE) op;      \
+  }
 
-#define TryCatchCondAbort(rc)                            \
-{                                                        \
-  rc_t r = rc;                                           \
-  if (r.IsAbort() or r._val == RC_FALSE) __abort_txn(r); \
-}
+#define TryCatchCondAbort(rc)                              \
+  {                                                        \
+    rc_t r = rc;                                           \
+    if (r.IsAbort() or r._val == RC_FALSE) __abort_txn(r); \
+  }
 
 // combines the try...catch block with ALWAYS_ASSERT and allows abort.
 // The rc_is_abort case is there because sometimes we want to make
 // sure say, a get, succeeds, but the read itsef could also cause
 // abort (by SSN). Use try_verify_strict if you need rc=true.
-#define TryVerifyRelaxed(oper)                     \
-{                                                  \
-  rc_t r = oper;                                   \
-  LOG_IF(FATAL, r._val != RC_TRUE && !r.IsAbort()) \
-    << "Wrong return value " << r._val;            \
-  if (r.IsAbort()) __abort_txn(r);                 \
-}
+#define TryVerifyRelaxed(oper)                       \
+  {                                                  \
+    rc_t r = oper;                                   \
+    LOG_IF(FATAL, r._val != RC_TRUE && !r.IsAbort()) \
+        << "Wrong return value " << r._val;          \
+    if (r.IsAbort()) __abort_txn(r);                 \
+  }
 
 // No abort is allowed, usually for loading
 inline void TryVerifyStrict(rc_t rc) {

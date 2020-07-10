@@ -1,7 +1,7 @@
-#include <iostream>
+#include <string.h>
 #include <unistd.h>
 #include <atomic>
-#include <string.h>
+#include <iostream>
 
 #include "rdma.h"
 #include "sm-config.h"
@@ -127,8 +127,9 @@ void context::finish_init(char *client_addr) {
   attr.qp_access_flags = IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_ATOMIC |
                          IBV_ACCESS_REMOTE_READ | IBV_ACCESS_LOCAL_WRITE;
 
-  ret = ibv_modify_qp(qp, &attr, IBV_QP_STATE | IBV_QP_PKEY_INDEX |
-                                     IBV_QP_PORT | IBV_QP_ACCESS_FLAGS);
+  ret = ibv_modify_qp(
+      qp, &attr,
+      IBV_QP_STATE | IBV_QP_PKEY_INDEX | IBV_QP_PORT | IBV_QP_ACCESS_FLAGS);
   THROW_IF(ret, illegal_argument, "Could not modify QP to INIT, ibv_modify_qp");
 #endif
 
@@ -214,7 +215,8 @@ void context::poll_send_cq(uint64_t nops) {
       n = ibv_poll_cq(send_cq, batch, wc);
     } while (n == 0);
     for (int i = 0; i < n; ++i) {
-      LOG_IF(FATAL, wc[i].status != IBV_WC_SUCCESS) << "Failed wc status: " << wc[i].status;
+      LOG_IF(FATAL, wc[i].status != IBV_WC_SUCCESS)
+          << "Failed wc status: " << wc[i].status;
     }
     ALWAYS_ASSERT(n <= batch);
     to_poll -= batch;

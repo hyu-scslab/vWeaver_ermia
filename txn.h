@@ -7,20 +7,20 @@
 
 #ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
 #include <cstring>
-#endif /* HYU_ZIGZAG */
+#endif          /* HYU_ZIGZAG */
 #ifdef HYU_EVAL /* HYU_EVAL */
 #include <stdio.h>
 #include <time.h>
 #endif /* HYU_EVAL */
 
-#include "dbcore/xid.h"
 #include "dbcore/sm-config.h"
-#include "dbcore/sm-oid.h"
 #include "dbcore/sm-log.h"
 #include "dbcore/sm-object.h"
+#include "dbcore/sm-oid.h"
 #include "dbcore/sm-rc.h"
-#include "masstree/masstree_btree.h"
+#include "dbcore/xid.h"
 #include "macros.h"
+#include "masstree/masstree_btree.h"
 #include "str_arena.h"
 #include "tuple.h"
 
@@ -30,10 +30,10 @@ using google::dense_hash_map;
 namespace ermia {
 #ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
 struct next_key_info_t {
-	OID oid;
-	Masstree::leaf<masstree_params> *leaf;
-	Masstree::leaf<masstree_params>::permuter_type perm;
-	int ki; // -1 is end of leaf, -2 is insertion case
+  OID oid;
+  Masstree::leaf<masstree_params> *leaf;
+  Masstree::leaf<masstree_params>::permuter_type perm;
+  int ki;  // -1 is end of leaf, -2 is insertion case
 };
 #endif /* HYU_ZIGZAG */
 
@@ -44,21 +44,21 @@ struct next_key_info_t {
 struct write_record_t {
   fat_ptr *entry;
 #ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
-	varstr key;
-	IndexDescriptor *idx_desc;
-	OID oid;
-	next_key_info_t next_key_info;
-	write_record_t(fat_ptr *e, const varstr *k, IndexDescriptor *index_desc,
-								OID o, next_key_info_t nk_info) {
-		entry = e;
-		key.l = k->l;
-		key.p = k->p;
-		idx_desc = index_desc;
-		oid = o;
-		memcpy(&next_key_info, &nk_info, sizeof(next_key_info_t));
-	}
-	write_record_t() : entry(nullptr), idx_desc(nullptr) {}
-#else /* HYU_ZIGZAG */
+  varstr key;
+  IndexDescriptor *idx_desc;
+  OID oid;
+  next_key_info_t next_key_info;
+  write_record_t(fat_ptr *e, const varstr *k, IndexDescriptor *index_desc,
+                 OID o, next_key_info_t nk_info) {
+    entry = e;
+    key.l = k->l;
+    key.p = k->p;
+    idx_desc = index_desc;
+    oid = o;
+    memcpy(&next_key_info, &nk_info, sizeof(next_key_info_t));
+  }
+  write_record_t() : entry(nullptr), idx_desc(nullptr) {}
+#else  /* HYU_ZIGZAG */
   write_record_t(fat_ptr *entry) : entry(entry) {}
   write_record_t() : entry(nullptr) {}
 #endif /* HYU_ZIGZAG */
@@ -72,15 +72,15 @@ struct write_set_t {
   write_set_t() : num_entries(0) {}
 #ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
   inline void emplace_back(fat_ptr *oe, const varstr *k,
-													IndexDescriptor *index_desc, OID oid,
-													next_key_info_t next_key_info) {
+                           IndexDescriptor *index_desc, OID oid,
+                           next_key_info_t next_key_info) {
     ALWAYS_ASSERT(num_entries < kMaxEntries);
-    new (&entries[num_entries]) write_record_t(oe, k, index_desc, oid,
-																							next_key_info);
+    new (&entries[num_entries])
+        write_record_t(oe, k, index_desc, oid, next_key_info);
     ++num_entries;
     ASSERT(entries[num_entries - 1].entry == oe);
   }
-#else /* HYU_ZIGZAG */
+#else  /* HYU_ZIGZAG */
   inline void emplace_back(fat_ptr *oe) {
     ALWAYS_ASSERT(num_entries < kMaxEntries);
     new (&entries[num_entries]) write_record_t(oe);
@@ -97,15 +97,15 @@ class transaction {
   friend class ConcurrentMasstreeIndex;
   friend class sm_oid_mgr;
 
-public:
+ public:
   typedef TXN::txn_state txn_state;
 #ifdef HYU_EVAL /* HYU_EVAL */
-	FILE* fp;
-	bool check;
-	int64_t start_time;
-	int64_t update_cost;
-	int64_t vridgy_cost;
-	int64_t kridgy_cost;
+  FILE *fp;
+  bool check;
+  int64_t start_time;
+  int64_t update_cost;
+  int64_t vridgy_cost;
+  int64_t kridgy_cost;
 #endif /* HYU_EVAL */
 
 #if defined(SSN) || defined(SSI) || defined(MVOCC)
@@ -131,11 +131,12 @@ public:
   inline bool is_read_mostly() { return flags & TXN_FLAG_READ_MOSTLY; }
   inline bool is_read_only() { return flags & TXN_FLAG_READ_ONLY; }
 
-protected:
+ protected:
   inline txn_state state() const { return xc->state; }
 
   // the absent set is a mapping from (masstree node -> version_number).
-  typedef dense_hash_map<const ConcurrentMasstree::node_opaque_t *, uint64_t > MasstreeAbsentSet;
+  typedef dense_hash_map<const ConcurrentMasstree::node_opaque_t *, uint64_t>
+      MasstreeAbsentSet;
   MasstreeAbsentSet masstree_absent_set;
 
  public:
@@ -166,14 +167,15 @@ protected:
   void Abort();
 
   OID PrepareInsert(OrderedIndex *index, varstr *value, dbtuple **out_tuple);
-  void FinishInsert(OrderedIndex *index, OID oid, const varstr *key, varstr *value, dbtuple *tuple);
-  bool TryInsertNewTuple(OrderedIndex *index, const varstr *key,
-                         varstr *value, OID *inserted_oid);
+  void FinishInsert(OrderedIndex *index, OID oid, const varstr *key,
+                    varstr *value, dbtuple *tuple);
+  bool TryInsertNewTuple(OrderedIndex *index, const varstr *key, varstr *value,
+                         OID *inserted_oid);
 
 #ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
   rc_t Update(IndexDescriptor *index_desc, OID oid, const varstr *k, varstr *v,
-							next_key_info_t next_key_info);
-#else /* HYU_ZIGZAG */
+              next_key_info_t next_key_info);
+#else  /* HYU_ZIGZAG */
   rc_t Update(IndexDescriptor *index_desc, OID oid, const varstr *k, varstr *v);
 #endif /* HYU_ZIGZAG */
 
@@ -184,8 +186,8 @@ protected:
   // expected public overrides
 
   inline str_arena &string_allocator() { return *sa; }
-	// for test HYU
-	inline sm_tx_log* GetLog() { return log; }
+  // for test HYU
+  inline sm_tx_log *GetLog() { return log; }
 
 #if defined(SSN) || defined(SSI) || defined(MVOCC)
   inline read_set_t &GetReadSet() {
@@ -200,10 +202,10 @@ protected:
   }
 
 #ifdef HYU_ZIGZAG /* HYU_ZIGZAG */
-	// oid is for debug
-	inline void add_to_write_set_zigzag(fat_ptr *entry, const varstr *k,
-																			IndexDescriptor *index_desc, OID oid,
-																			next_key_info_t next_key_info) {
+  // oid is for debug
+  inline void add_to_write_set_zigzag(fat_ptr *entry, const varstr *k,
+                                      IndexDescriptor *index_desc, OID oid,
+                                      next_key_info_t next_key_info) {
 #ifndef NDEBUG
     auto &write_set = GetWriteSet();
     for (uint32_t i = 0; i < write_set.size(); ++i) {
@@ -213,7 +215,7 @@ protected:
     }
 #endif
     GetWriteSet().emplace_back(entry, k, index_desc, oid, next_key_info);
-	}
+  }
 #else /* HYU_ZIGZAG */
   inline void add_to_write_set(fat_ptr *entry) {
 #ifndef NDEBUG
@@ -231,9 +233,9 @@ protected:
   inline TXN::xid_context *GetXIDContext() { return xc; }
 
 #ifdef HYU_EVAL_2 /* HYU_EVAL_2 */
- // we need to modify begin timestamp for evaluation 2
+  // we need to modify begin timestamp for evaluation 2
  public:
-#else /* HYU_EVAL_2 */
+#else  /* HYU_EVAL_2 */
  protected:
 #endif /* HYU_EVAL_2 */
   const uint64_t flags;

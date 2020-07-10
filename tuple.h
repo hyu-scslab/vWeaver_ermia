@@ -150,7 +150,7 @@ struct dbtuple {
     ALWAYS_ASSERT(!config::is_backup_srv());
     Object *myobj = GetObject();
     ASSERT(myobj->GetPayload() == (char *)this);
-    Object *next_obj = (Object*)myobj->GetNextVolatile().offset();
+    Object *next_obj = (Object *)myobj->GetNextVolatile().offset();
     return next_obj ? next_obj->GetPinnedTuple() : nullptr;
   }
 
@@ -173,10 +173,9 @@ struct dbtuple {
         return rc_t{RC_FALSE};
       }
       out_v->p = pvalue->data();
-      //ASSERT(pvalue->size() == size);
-			// [HYU] evade assertion
-			if (pvalue->size() != size)
-				pvalue->l = size;
+      // ASSERT(pvalue->size() == size);
+      // [HYU] evade assertion
+      if (pvalue->size() != size) pvalue->l = size;
     }
     out_v->l = size;
     return size > 0 ? rc_t{RC_TRUE} : rc_t{RC_FALSE};
@@ -185,10 +184,11 @@ struct dbtuple {
   // move data from the user's varstr pvalue to this tuple
   inline void DoWrite() const {
     if (pvalue) {
-			//if (pvalue->data() != (uint8_t*)0x4 && pvalue->data() != (uint8_t*)0x8) {
-				ASSERT(pvalue->size() == size);
-				memcpy((void *)get_value_start(), pvalue->data(), pvalue->size());
-			//}
+      // if (pvalue->data() != (uint8_t*)0x4 && pvalue->data() != (uint8_t*)0x8)
+      // {
+      ASSERT(pvalue->size() == size);
+      memcpy((void *)get_value_start(), pvalue->data(), pvalue->size());
+      //}
     }
   }
 };

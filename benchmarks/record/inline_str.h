@@ -3,8 +3,8 @@
 #include <stdint.h>
 #include <string.h>
 
-#include <string>
 #include <ostream>
+#include <string>
 
 #include "../macros.h"
 #include "serializer.h"
@@ -150,9 +150,7 @@ class inline_str_fixed {
     return *this;
   }
 
-  ALWAYS_INLINE std::string str() const {
-    return std::string(&buf[0], N);
-  }
+  ALWAYS_INLINE std::string str() const { return std::string(&buf[0], N); }
 
   ALWAYS_INLINE const char *data() const { return &buf[0]; }
 
@@ -163,7 +161,7 @@ class inline_str_fixed {
   inline void assign(const char *s, size_t n) {
     ASSERT(n <= N);
     memcpy(&buf[0], s, n);
-    if ((N - n) > 0)                         // to suppress compiler warning
+    if ((N - n) > 0)                     // to suppress compiler warning
       memset(&buf[n], FillChar, N - n);  // pad with spaces
   }
 

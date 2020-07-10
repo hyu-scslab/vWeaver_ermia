@@ -1,13 +1,13 @@
 #pragma once
 
-#include "dbcore/sm-common.h"
-#include "varstr.h"
 #include <atomic>
 #include <memory>
+#include "dbcore/sm-common.h"
+#include "varstr.h"
 
 namespace ermia {
 class str_arena {
-public:
+ public:
   static const uint64_t ReserveBytes = 128 * 1024 * 1024;
   static const size_t MinStrReserveLength = 2 * CACHELINE_SIZE;
   str_arena() : n(0) {
@@ -39,7 +39,7 @@ public:
   varstr *atomic_next(uint64_t size) {
     uint64_t off = n.fetch_add(
         align_up(size + sizeof(varstr)),
-        std::memory_order_acq_rel); // for adler32's 16-byte alignment
+        std::memory_order_acq_rel);  // for adler32's 16-byte alignment
     ASSERT(n < ReserveBytes);
     varstr *ret = new (str + off) varstr(str + off + sizeof(varstr), size);
     return ret;
@@ -52,13 +52,13 @@ public:
            (uint64_t) px->data() + px->size() <= (uint64_t)str + n;
   }
 
-private:
+ private:
   char *str;
   std::atomic<size_t> n;
 };
 
 class scoped_str_arena {
-public:
+ public:
   scoped_str_arena(str_arena *arena) : arena(arena) {}
 
   scoped_str_arena(str_arena &arena) : arena(&arena) {}
@@ -70,13 +70,12 @@ public:
   scoped_str_arena &operator=(const scoped_str_arena &) = delete;
 
   ~scoped_str_arena() {
-    if (arena)
-      arena->reset();
+    if (arena) arena->reset();
   }
 
   ALWAYS_INLINE str_arena *get() { return arena; }
 
-private:
+ private:
   str_arena *arena;
 };
-} // namespace ermia
+}  // namespace ermia

@@ -6,7 +6,7 @@ namespace ermia {
 std::unordered_map<std::string, IndexDescriptor*> IndexDescriptor::name_map;
 std::unordered_map<FID, IndexDescriptor*> IndexDescriptor::fid_map;
 
-IndexDescriptor::IndexDescriptor(OrderedIndex *index, std::string& name)
+IndexDescriptor::IndexDescriptor(OrderedIndex* index, std::string& name)
     : name_(name),
       primary_name_(""),
       index_(index),
@@ -17,7 +17,8 @@ IndexDescriptor::IndexDescriptor(OrderedIndex *index, std::string& name)
   name_map[name_] = this;
 }
 
-IndexDescriptor::IndexDescriptor(OrderedIndex *index, std::string& name, std::string& primary_name)
+IndexDescriptor::IndexDescriptor(OrderedIndex* index, std::string& name,
+                                 std::string& primary_name)
     : name_(name),
       primary_name_(primary_name),
       index_(index),

@@ -1,9 +1,9 @@
+#include "sm-log-alloc.h"
+#include "../util.h"
 #include "rcu.h"
 #include "sm-cmd-log.h"
-#include "sm-log-alloc.h"
 #include "sm-rep.h"
 #include "stopwatch.h"
-#include "../util.h"
 
 namespace {
 
@@ -54,12 +54,14 @@ sm_log_alloc_mgr::sm_log_alloc_mgr(sm_log_recover_impl *rf, void *rfn_arg)
       config::log_buffer_mb * config::MB % config::log_redo_partitions == 0);
   _logbuf = sm_log::get_logbuf();
   _logbuf->_head = _logbuf->_tail = get_starting_byte_offset(&_lm);
-  if (!config::is_backup_srv() || (config::command_log && config::replay_threads)) {
+  if (!config::is_backup_srv() ||
+      (config::command_log && config::replay_threads)) {
     _tls_lsn_offset =
         (uint64_t *)malloc(sizeof(uint64_t) * config::MAX_THREADS);
     memset(_tls_lsn_offset, 0, sizeof(uint64_t) * config::MAX_THREADS);
 
-    uint32_t n = config::is_backup_srv() ? config::replay_threads : config::worker_threads;
+    uint32_t n = config::is_backup_srv() ? config::replay_threads
+                                         : config::worker_threads;
     _commit_queue = new commit_queue[n];
     for (uint32_t i = 0; i < n; ++i) {
       _commit_queue[i].lm = this;
@@ -83,9 +85,9 @@ sm_log_alloc_mgr::~sm_log_alloc_mgr() {
 
 void sm_log_alloc_mgr::enqueue_committed_xct(uint32_t worker_id,
                                              uint64_t start_time) {
-  uint64_t lsn = config::command_log ?
-                 CommandLog::cmd_log->GetTlsOffset() :
-                 get_tls_lsn_offset() & ~kDirtyTlsLsnOffset;
+  uint64_t lsn = config::command_log
+                     ? CommandLog::cmd_log->GetTlsOffset()
+                     : get_tls_lsn_offset() & ~kDirtyTlsLsnOffset;
   _commit_queue[worker_id].push_back(lsn, start_time);
 }
 
@@ -93,7 +95,7 @@ void sm_log_alloc_mgr::commit_queue::push_back(uint64_t lsn,
                                                uint64_t start_time) {
   bool flush = false;
   bool insert = true;
-retry :
+retry:
   if (flush) {
     if (config::command_log) {
       CommandLog::cmd_log->TryFlush();
@@ -123,7 +125,8 @@ retry :
 
 void sm_log_alloc_mgr::dequeue_committed_xcts(uint64_t upto,
                                               uint64_t end_time) {
-  uint32_t n = config::is_backup_srv() ? config::replay_threads : config::worker_threads;
+  uint32_t n =
+      config::is_backup_srv() ? config::replay_threads : config::worker_threads;
   for (uint32_t i = 0; i < n; i++) {
     CRITICAL_SECTION(cs, _commit_queue[i].lock);
     uint32_t n = volatile_read(_commit_queue[i].start);
@@ -139,7 +142,8 @@ void sm_log_alloc_mgr::dequeue_committed_xcts(uint64_t upto,
       dequeue++;
     }
     _commit_queue[i].items -= dequeue;
-    volatile_write(_commit_queue[i].start, (n + dequeue) % config::group_commit_queue_length);
+    volatile_write(_commit_queue[i].start,
+                   (n + dequeue) % config::group_commit_queue_length);
   }
 }
 
@@ -266,9 +270,9 @@ retry:
       LSN::make(_durable_flushed_lsn_offset, durable_sid->segnum));
 }
 
-void sm_log_alloc_mgr::PrimaryShipLog(segment_id *durable_sid,
-                                      uint64_t nbytes, bool new_seg,
-                                      uint64_t new_offset, const char *buf) {
+void sm_log_alloc_mgr::PrimaryShipLog(segment_id *durable_sid, uint64_t nbytes,
+                                      bool new_seg, uint64_t new_offset,
+                                      const char *buf) {
   ASSERT(!config::command_log);
   bool have_imm = false;
   uint32_t imm = 0;
@@ -283,11 +287,10 @@ void sm_log_alloc_mgr::PrimaryShipLog(segment_id *durable_sid,
     // offsets.
     bool seg_first_ship =
         _durable_flushed_lsn_offset == durable_sid->start_offset;
-    DLOG(INFO) << "Will ship " << std::hex << _durable_flushed_lsn_offset
-               << " " << new_offset << " " << durable_sid->byte_offset
-               << " new_seg=" << new_seg
-               << " seg_first_ship=" << seg_first_ship << " nbytes=" << nbytes
-               << std::dec;
+    DLOG(INFO) << "Will ship " << std::hex << _durable_flushed_lsn_offset << " "
+               << new_offset << " " << durable_sid->byte_offset
+               << " new_seg=" << new_seg << " seg_first_ship=" << seg_first_ship
+               << " nbytes=" << nbytes << std::dec;
     // Two cases when we cross segment boundaries:
     // 1. We will end in the new segment;
     // 2. We end right before the new segment (ie the end of the old segment).
@@ -299,7 +302,7 @@ void sm_log_alloc_mgr::PrimaryShipLog(segment_id *durable_sid,
     }
   }
   LOG_IF(FATAL, nbytes > config::group_commit_bytes + MIN_LOG_BLOCK_SIZE)
-        << "Trying to ship too much: " << nbytes;
+      << "Trying to ship too much: " << nbytes;
   if (config::persist_policy == config::kPersistPipelined) {
     if (config::log_ship_by_rdma) {
       // Wait for the backup to persist (it might act fast and set
@@ -321,8 +324,10 @@ void sm_log_alloc_mgr::PrimaryShipLog(segment_id *durable_sid,
       rep::primary_rdma_set_global_persisted_lsn(_durable_flushed_lsn_offset);
     } else {
       for (auto &fd : rep::backup_sockfds) {
-        uint32_t nbytes = send(fd, (char*)&_durable_flushed_lsn_offset, sizeof(uint64_t), 0);
-        LOG_IF(FATAL, nbytes != sizeof(uint64_t)) << "Error sending global persisted lsn";
+        uint32_t nbytes =
+            send(fd, (char *)&_durable_flushed_lsn_offset, sizeof(uint64_t), 0);
+        LOG_IF(FATAL, nbytes != sizeof(uint64_t))
+            << "Error sending global persisted lsn";
       }
     }
   }
@@ -333,7 +338,8 @@ void sm_log_alloc_mgr::PrimaryShipLog(segment_id *durable_sid,
 // pending persistence. Called only after successfully persisting the log.
 void sm_log_alloc_mgr::PrimaryCommitPersistedWork(uint64_t new_offset) {
   if (config::num_active_backups) {
-    if (!config::IsLoading() && config::persist_policy == config::kPersistSync) {
+    if (!config::IsLoading() &&
+        config::persist_policy == config::kPersistSync) {
       if (config::log_ship_by_rdma) {
         // Wait for the backup to persist (it might act fast and set
         // ReadyToReceive too)
@@ -364,8 +370,9 @@ void sm_log_alloc_mgr::PrimaryCommitPersistedWork(uint64_t new_offset) {
         }
         // Set global persisted LSN
         for (auto &fd : rep::backup_sockfds) {
-          uint32_t nbytes = send(fd, (char*)&new_offset, sizeof(uint64_t), 0);
-          LOG_IF(FATAL, nbytes != sizeof(uint64_t)) << "Error sending global persisted lsn";
+          uint32_t nbytes = send(fd, (char *)&new_offset, sizeof(uint64_t), 0);
+          LOG_IF(FATAL, nbytes != sizeof(uint64_t))
+              << "Error sending global persisted lsn";
         }
       }
     } else if (config::persist_policy == config::kPersistAsync) {
@@ -476,8 +483,7 @@ segment_id *sm_log_alloc_mgr::PrimaryFlushLog(uint64_t new_dlsn_offset,
     // Ship the log to backups, unless we're doing async log shipping
     if (!config::command_log &&
         config::persist_policy != config::kPersistAsync &&
-        config::num_active_backups &&
-        !config::IsLoading()) {
+        config::num_active_backups && !config::IsLoading()) {
       PrimaryShipLog(durable_sid, nbytes, new_seg, new_offset, buf);
       if (new_seg) {
         new_seg = false;
@@ -494,14 +500,16 @@ segment_id *sm_log_alloc_mgr::PrimaryFlushLog(uint64_t new_dlsn_offset,
       n = nbytes;
     } else {
       n = os_pwrite(active_fd, buf, nbytes, file_offset);
-      if (!config::command_log && config::persist_policy == config::kPersistAsync) {
+      if (!config::command_log &&
+          config::persist_policy == config::kPersistAsync) {
         rep::async_ship_cond.notify_all();
       }
     }
     LOG_IF(FATAL, n < nbytes) << "Incomplete log write";
 
     if (!config::command_log) {
-      // Dequeue transactions pending persistence (if pipelined group commit is on)
+      // Dequeue transactions pending persistence (if pipelined group commit is
+      // on)
       PrimaryCommitPersistedWork(new_offset);
     }
 
@@ -580,29 +588,29 @@ segment_id *sm_log_alloc_mgr::PrimaryFlushLog(uint64_t new_dlsn_offset,
 log_allocation *sm_log_alloc_mgr::allocate(uint32_t nrec,
                                            size_t payload_bytes) {
 #warning TODO: protocol to prevent log from becoming wedged
-/* ^^^
+  /* ^^^
 
-   In any logging scheme that uses checkpoints to reclaim log
-   space, a catch-22 lies in wait for the unwary implementor: the
-   checkpoint must be logged, so the log will become permanently
-   wedged if we allow it to completely fill. The solution is to
-   reserve some amount of log space for an "emergency" checkpoint
-   that can reclaim at least one segment and avert disaster. In
-   our case, checkpointing doesn't actually let us reclaim space,
-   but the segment-recovery protocol we use has the same problem.
+     In any logging scheme that uses checkpoints to reclaim log
+     space, a catch-22 lies in wait for the unwary implementor: the
+     checkpoint must be logged, so the log will become permanently
+     wedged if we allow it to completely fill. The solution is to
+     reserve some amount of log space for an "emergency" checkpoint
+     that can reclaim at least one segment and avert disaster. In
+     our case, checkpointing doesn't actually let us reclaim space,
+     but the segment-recovery protocol we use has the same problem.
 
-   Unfortunately, our single-CAS scheme for acquiring a LSN offset
-   means we can't easily detect that the log is almost full until
-   after we've already acquired an LSN and made the problem worse.
+     Unfortunately, our single-CAS scheme for acquiring a LSN offset
+     means we can't easily detect that the log is almost full until
+     after we've already acquired an LSN and made the problem worse.
 
-   The (as yet unimplemented) solution to this quandary is for
-   each thread to check whether its newly-acquired block lands in
-   a "red zone" near the end of the log capacity. If so, it must
-   discard the record, abort, and block until space has been
-   reclaimed. The red zone has to be large enough that every
-   transaction-executing thread in the system could make a
-   maximum-sized request and still leave room for a checkpoint.
- */
+     The (as yet unimplemented) solution to this quandary is for
+     each thread to check whether its newly-acquired block lands in
+     a "red zone" near the end of the log capacity. If so, it must
+     discard the record, abort, and block until space has been
+     reclaimed. The red zone has to be large enough that every
+     transaction-executing thread in the system could make a
+     maximum-sized request and still leave room for a checkpoint.
+   */
 
 #warning TODO: prevent reclamation of uncommitted overflow records
   /* ^^^
@@ -618,11 +626,11 @@ log_allocation *sm_log_alloc_mgr::allocate(uint32_t nrec,
    */
 
   ASSERT(is_aligned(payload_bytes));
-/* Step #1: join the log list to obtain an LSN offset.
+  /* Step #1: join the log list to obtain an LSN offset.
 
-   All we need here is the LSN offset for the new block; we don't
-   yet know what segment (if any) actually contains that offset.
- */
+     All we need here is the LSN offset for the new block; we don't
+     yet know what segment (if any) actually contains that offset.
+   */
 
   uint64_t *my_off = &_tls_lsn_offset[thread::MyId()];
   volatile_write(*my_off, *my_off | kDirtyTlsLsnOffset);
@@ -658,20 +666,24 @@ start_over:
   // make sure the flusher knows about this location (for log shipping).
   // Still needed even for oid-parallel replay because we need it to determine
   // how much to ship.
-  if (!config::IsLoading() && config::num_active_backups && !config::command_log) {
+  if (!config::IsLoading() && config::num_active_backups &&
+      !config::command_log) {
     uint64_t start_partition =
         (lsn_offset / _logbuf_partition_size) % config::log_redo_partitions;
-    uint64_t next_partition =
-        (next_lsn_offset / _logbuf_partition_size) % config::log_redo_partitions;
+    uint64_t next_partition = (next_lsn_offset / _logbuf_partition_size) %
+                              config::log_redo_partitions;
     if (start_partition != next_partition) {
       ALWAYS_ASSERT((start_partition + 1) % config::log_redo_partitions ==
                     next_partition);
       volatile_write(rep::log_redo_partition_bounds[start_partition],
                      rval.next_lsn._val);
-      DLOG(INFO) << "Log buffer partition: " << start_partition << " "
-                 << std::hex << rep::log_redo_partition_bounds[start_partition] << std::dec
-                 << " "
-                 << next_lsn_offset - LSN{rep::log_redo_partition_bounds[(start_partition-1) % config::log_redo_partitions]}.offset();
+      DLOG(INFO)
+          << "Log buffer partition: " << start_partition << " " << std::hex
+          << rep::log_redo_partition_bounds[start_partition] << std::dec << " "
+          << next_lsn_offset -
+                 LSN{rep::log_redo_partition_bounds
+                         [(start_partition - 1) % config::log_redo_partitions]}
+                     .offset();
     }
   }
 
@@ -734,15 +746,18 @@ grab_buffer:
 void sm_log_alloc_mgr::release(log_allocation *x) {
   // Include the size of our allocation, indicated by next_lsn.
   // Otherwise we might lose committed work.
-  if (!config::is_backup_srv() || (config::command_log && config::replay_threads)) {
+  if (!config::is_backup_srv() ||
+      (config::command_log && config::replay_threads)) {
     // Only need to do this for the primary server - worker threads on
     // backups don't do updates
     set_tls_lsn_offset(x->block->next_lsn().offset());
   }
   RCU::rcu_free(x);
-  bool should_kick = config::group_commit ?
-      cur_lsn_offset() - _durable_flushed_lsn_offset >= config::group_commit_bytes :
-      cur_lsn_offset() - _durable_flushed_lsn_offset >= config::log_buffer_mb * config::MB / 2;
+  bool should_kick = config::group_commit
+                         ? cur_lsn_offset() - _durable_flushed_lsn_offset >=
+                               config::group_commit_bytes
+                         : cur_lsn_offset() - _durable_flushed_lsn_offset >=
+                               config::log_buffer_mb * config::MB / 2;
 
   /* Hopefully the log daemon is already awake, but be ready to give
      it a kick if need be.
@@ -815,14 +830,17 @@ void sm_log_alloc_mgr::_log_write_daemon() {
     uint64_t cur_offset = cur_lsn_offset();
     uint64_t min_tls = smallest_tls_lsn_offset();
     uint64_t new_dlsn_offset = min_tls;
-    if (!config::IsLoading() && config::num_active_backups > 0 && !config::command_log) {
+    if (!config::IsLoading() && config::num_active_backups > 0 &&
+        !config::command_log) {
       uint64_t max_size = config::group_commit_bytes + MIN_LOG_BLOCK_SIZE;
       if (new_dlsn_offset - _durable_flushed_lsn_offset > max_size) {
-        // Find the maximum that will cause us to ship at most [group_commit_size_kb]
+        // Find the maximum that will cause us to ship at most
+        // [group_commit_size_kb]
         uint64_t max = 0;
         for (uint64_t i = 0; i < config::log_redo_partitions; ++i) {
           uint64_t off = LSN{rep::log_redo_partition_bounds[i]}.offset();
-          if (off <= min_tls && off > max && (off - _durable_flushed_lsn_offset <= max_size)) {
+          if (off <= min_tls && off > max &&
+              (off - _durable_flushed_lsn_offset <= max_size)) {
             max = off;
           }
         }
@@ -877,7 +895,8 @@ void sm_log_alloc_mgr::_log_write_daemon() {
     }
 
     // time to sleep?
-    while (!_write_daemon_should_stop && !(volatile_read(_write_daemon_state) & DAEMON_HAS_WORK)) {
+    while (!_write_daemon_should_stop &&
+           !(volatile_read(_write_daemon_state) & DAEMON_HAS_WORK)) {
       // looks like we can sleep
       auto old_state =
           __sync_fetch_and_or(&_write_daemon_state, DAEMON_SLEEPING);

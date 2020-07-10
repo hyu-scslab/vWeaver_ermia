@@ -32,4 +32,4 @@ namespace {
 #if 0
 { // disable autoindent
 #endif
-}
+}  // namespace

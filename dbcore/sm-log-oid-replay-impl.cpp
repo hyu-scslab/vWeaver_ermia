@@ -2,17 +2,17 @@
 #include "rcu.h"
 #include "sm-index.h"
 #include "sm-log-recover-impl.h"
-#include "sm-oid.h"
-#include "sm-oid-impl.h"
 #include "sm-oid-alloc-impl.h"
+#include "sm-oid-impl.h"
+#include "sm-oid.h"
 #include "sm-rep.h"
 
 namespace ermia {
 
-LSN parallel_oid_replay::operator()(void *arg, sm_log_scan_mgr *s,
-                                    LSN from, LSN to) {
+LSN parallel_oid_replay::operator()(void *arg, sm_log_scan_mgr *s, LSN from,
+                                    LSN to) {
   MARK_REFERENCED(arg);
-  //util::scoped_timer t("parallel_oid_replay");
+  // util::scoped_timer t("parallel_oid_replay");
   scanner = s;
   start_lsn = from;
   end_lsn = to;
@@ -101,7 +101,10 @@ void parallel_oid_replay::redo_runner::redo_partition() {
   static thread_local std::unordered_map<FID, OID> max_oid;
   replayed_lsn = INVALID_LSN;
 
-  for (; scan->valid() and scan->payload_lsn().offset() + scan->payload_size() <= owner->end_lsn.offset(); scan->next()) {
+  for (;
+       scan->valid() and scan->payload_lsn().offset() + scan->payload_size() <=
+                             owner->end_lsn.offset();
+       scan->next()) {
     // During replay on backups we might encounter incomplete log blocks,
     // because the primary might just ship X bytes without considering
     // log block boundaries. So here we remember the log block's starting
@@ -119,36 +122,36 @@ void parallel_oid_replay::redo_runner::redo_partition() {
     }
 
     switch (scan->type()) {
-      case sm_log_scan_mgr::LOG_UPDATE_KEY:
-        owner->recover_update_key(scan);
-        break;
-      case sm_log_scan_mgr::LOG_UPDATE:
-      case sm_log_scan_mgr::LOG_RELOCATE:
-        ucount++;
-        owner->recover_update(scan, false, false);
-        break;
-      case sm_log_scan_mgr::LOG_DELETE:
-      case sm_log_scan_mgr::LOG_ENHANCED_DELETE:
-        // Ignore delete on primary server
-        if (config::is_backup_srv()) {
-          owner->recover_update(scan, true, true);
-        }
-        dcount++;
-        break;
-      case sm_log_scan_mgr::LOG_INSERT_INDEX:
-        iicount++;
-        owner->recover_index_insert(scan);
-        break;
-      case sm_log_scan_mgr::LOG_INSERT:
-        icount++;
-        owner->recover_insert(scan, config::is_backup_srv());
-        break;
-      case sm_log_scan_mgr::LOG_FID:
-        // The main recover function should have already did this
-        ASSERT(oidmgr->file_exists(scan->fid()));
-        break;
-      default:
-        DIE("unreachable");
+    case sm_log_scan_mgr::LOG_UPDATE_KEY:
+      owner->recover_update_key(scan);
+      break;
+    case sm_log_scan_mgr::LOG_UPDATE:
+    case sm_log_scan_mgr::LOG_RELOCATE:
+      ucount++;
+      owner->recover_update(scan, false, false);
+      break;
+    case sm_log_scan_mgr::LOG_DELETE:
+    case sm_log_scan_mgr::LOG_ENHANCED_DELETE:
+      // Ignore delete on primary server
+      if (config::is_backup_srv()) {
+        owner->recover_update(scan, true, true);
+      }
+      dcount++;
+      break;
+    case sm_log_scan_mgr::LOG_INSERT_INDEX:
+      iicount++;
+      owner->recover_index_insert(scan);
+      break;
+    case sm_log_scan_mgr::LOG_INSERT:
+      icount++;
+      owner->recover_insert(scan, config::is_backup_srv());
+      break;
+    case sm_log_scan_mgr::LOG_FID:
+      // The main recover function should have already did this
+      ASSERT(oidmgr->file_exists(scan->fid()));
+      break;
+    default:
+      DIE("unreachable");
     }
     size += scan->payload_size();
   }

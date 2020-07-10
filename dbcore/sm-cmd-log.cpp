@@ -1,8 +1,8 @@
-#include "sm-alloc.h"
 #include "sm-cmd-log.h"
+#include "../util.h"
+#include "sm-alloc.h"
 #include "sm-log.h"
 #include "sm-rep.h"
-#include "../util.h"
 
 namespace ermia {
 namespace CommandLog {
@@ -31,7 +31,7 @@ void CommandLogManager::Insert(uint32_t partition_id, uint32_t xct_type) {
   uint64_t off = allocated_.fetch_add(kRecordSize);
   uint64_t end_off = off + kRecordSize;
 
-  LogRecord *r = (LogRecord*)&buffer_[off % buffer_size_];
+  LogRecord *r = (LogRecord *)&buffer_[off % buffer_size_];
   LOG_IF(FATAL, off % buffer_size_ + kRecordSize > buffer_size_);
   while (end_off - durable_offset_ > buffer_size_) {
     TryFlush();
@@ -87,7 +87,7 @@ void CommandLogManager::Flush(bool check_tls) {
     } else {
       if (config::num_active_backups > 0) {
         DLOG(INFO) << "Shipping " << std::hex << durable_off << "-"
-          << durable_off + to_write << std::dec;
+                   << durable_off + to_write << std::dec;
         ShipLog(buf, to_write);
         {
           util::timer t;
@@ -110,11 +110,11 @@ void CommandLogManager::Flush(bool check_tls) {
 }
 
 void CommandLogManager::BackgroundReplayDaemon() {
-  bg_buffer = (char*)malloc(config::group_commit_bytes);
+  bg_buffer = (char *)malloc(config::group_commit_bytes);
   dirent_iterator dir(config::log_dir.c_str());
   int dfd = dir.dup();
   std::string fname = config::log_dir + std::string("/mlog");
-  int fd = os_openat(dfd, + fname.c_str(), O_RDWR);
+  int fd = os_openat(dfd, +fname.c_str(), O_RDWR);
 
   // Keep notifying threads to replay a specified range
   uint64_t off = 0;
@@ -125,14 +125,16 @@ void CommandLogManager::BackgroundReplayDaemon() {
       off += size;
       if (size) {
         volatile_write(next_replay_offset[idx], off);
-        while (replayed_offset < off) {}
+        while (replayed_offset < off) {
+        }
         idx = (idx + 1) % 2;
       }
     }
   }
 }
 
-void CommandLogManager::BackgroundReplay(uint32_t redoer_id, RedoWorkloadFunction redo_function) {
+void CommandLogManager::BackgroundReplay(uint32_t redoer_id,
+                                         RedoWorkloadFunction redo_function) {
   uint64_t last_replayed = replayed_offset;
   ALWAYS_ASSERT(redoer_barrier);
   redoer_barrier->count_down();
@@ -153,7 +155,7 @@ void CommandLogManager::BackgroundReplay(uint32_t redoer_id, RedoWorkloadFunctio
     uint32_t off = 0;
     uint32_t size = 0;
     while (to_replay > 0) {
-      LogRecord *r = (LogRecord*)&bg_buffer[off];
+      LogRecord *r = (LogRecord *)&bg_buffer[off];
       LOG_IF(FATAL, bg_buffer + off > bg_buffer + config::group_commit_bytes);
       off += kRecordSize;
       uint64_t id = r->partition_id % config::replay_threads;
@@ -162,27 +164,30 @@ void CommandLogManager::BackgroundReplay(uint32_t redoer_id, RedoWorkloadFunctio
         id = r->partition_id;  // Pass the actual partition (warehouse for TPCC)
         LOG_IF(FATAL, r->partition_id < 1);
         ASSERT(redo_function);
-        redo_function(r->transaction_type, (void*)id);
+        redo_function(r->transaction_type, (void *)id);
         size += kRecordSize;
       }
       to_replay -= kRecordSize;
       LOG_IF(FATAL, to_replay < 0);
     }
-    DLOG(INFO) << "Redoer " << redoer_id << ": replayed "
-      << size << " bytes, " << size / kRecordSize << " records";
+    DLOG(INFO) << "Redoer " << redoer_id << ": replayed " << size << " bytes, "
+               << size / kRecordSize << " records";
     last_replayed = target_offset;
     uint64_t n = replayed_offset.fetch_add(size);
     if (n + size == target_offset) {
       logmgr->flush();
-      volatile_write(rep::replayed_lsn_offset, logmgr->durable_flushed_lsn().offset());
+      volatile_write(rep::replayed_lsn_offset,
+                     logmgr->durable_flushed_lsn().offset());
     }
-    while (replayed_offset < target_offset) {}
+    while (replayed_offset < target_offset) {
+    }
     DLOG(INFO) << "Redoer " << redoer_id << " " << std::hex << n << "+" << size;
   }
 }
 
 // For synchronous and pipelined redo only
-void CommandLogManager::BackupRedo(uint32_t redoer_id, RedoWorkloadFunction redo_function) {
+void CommandLogManager::BackupRedo(uint32_t redoer_id,
+                                   RedoWorkloadFunction redo_function) {
   if (config::replay_policy == config::kReplayBackground) {
     BackgroundReplay(redoer_id, redo_function);
     return;
@@ -206,9 +211,9 @@ void CommandLogManager::BackupRedo(uint32_t redoer_id, RedoWorkloadFunction redo
     uint64_t off = volatile_read(last_replayed) % buffer_size_;
     uint32_t size = 0;
     DLOG(INFO) << "Redoer " << redoer_id << std::hex << " to replay "
-      << last_replayed << "-" << target_offset << std::dec;
+               << last_replayed << "-" << target_offset << std::dec;
     while (to_replay > 0) {
-      LogRecord *r = (LogRecord*)&buffer_[off];
+      LogRecord *r = (LogRecord *)&buffer_[off];
       LOG_IF(FATAL, buffer_ + off > buffer_ + buffer_size_);
       off += kRecordSize;
       uint64_t id = r->partition_id % config::replay_threads;
@@ -217,21 +222,23 @@ void CommandLogManager::BackupRedo(uint32_t redoer_id, RedoWorkloadFunction redo
         id = r->partition_id;  // Pass the actual partition (warehouse for TPCC)
         LOG_IF(FATAL, r->partition_id < 1);
         ASSERT(redo_function);
-        redo_function(r->transaction_type, (void*)id);
+        redo_function(r->transaction_type, (void *)id);
         size += kRecordSize;
       }
       to_replay -= kRecordSize;
       LOG_IF(FATAL, to_replay < 0);
     }
-    DLOG(INFO) << "Redoer " << redoer_id << ": replayed "
-      << size << " bytes, " << size / kRecordSize << " records";
+    DLOG(INFO) << "Redoer " << redoer_id << ": replayed " << size << " bytes, "
+               << size / kRecordSize << " records";
     last_replayed = target_offset;
     uint64_t n = replayed_offset.fetch_add(size);
     if (n + size == target_offset) {
       logmgr->flush();
-      volatile_write(rep::replayed_lsn_offset, logmgr->durable_flushed_lsn().offset());
+      volatile_write(rep::replayed_lsn_offset,
+                     logmgr->durable_flushed_lsn().offset());
     }
-    while (replayed_offset < target_offset) {}
+    while (replayed_offset < target_offset) {
+    }
     DLOG(INFO) << "Redoer " << redoer_id << " " << std::hex << n << "+" << size;
   }
 }
@@ -241,11 +248,12 @@ void CommandLogManager::ShipLog(char *buf, uint32_t size) {
   ASSERT(rep::backup_sockfds.size());
   DLOG(INFO) << "Shipping " << size << " bytes";
   for (int &fd : rep::backup_sockfds) {
-    uint32_t nbytes = send(fd, (char*)&size, sizeof(uint32_t), 0);
-    LOG_IF(FATAL, nbytes != sizeof(uint32_t)) << "Incomplete log shipping (header)";
+    uint32_t nbytes = send(fd, (char *)&size, sizeof(uint32_t), 0);
+    LOG_IF(FATAL, nbytes != sizeof(uint32_t))
+        << "Incomplete log shipping (header)";
     nbytes = send(fd, buf, size, 0);
-    LOG_IF(FATAL, nbytes != size) << "Incomplete log shipping: " << nbytes << "/"
-                                  << size;
+    LOG_IF(FATAL, nbytes != size)
+        << "Incomplete log shipping: " << nbytes << "/" << size;
   }
   os_pwrite(fd_, buf, size, durable_offset_);
   for (int &fd : rep::backup_sockfds) {

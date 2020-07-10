@@ -19,26 +19,26 @@ static thread_local char LOG_ALIGN tls_log_space[sizeof(ermia::sm_tx_log_impl)];
 static thread_local bool tls_log_space_used = false;
 
 static ermia::sm_tx_log_impl *get_log_impl(ermia::sm_tx_log *x) {
-	if (x != (void *)tls_log_space) {
-		std::cerr << "x: " << x << std::endl;
-		std::cerr << "tls_log_space: " << (void *)tls_log_space << std::endl;
-		if (tls_log_space_used == false)
-			std::cerr << "tls_log_space is not used" << std::endl;
-	}
+  if (x != (void *)tls_log_space) {
+    std::cerr << "x: " << x << std::endl;
+    std::cerr << "tls_log_space: " << (void *)tls_log_space << std::endl;
+    if (tls_log_space_used == false)
+      std::cerr << "tls_log_space is not used" << std::endl;
+  }
   DIE_IF(
       x != (void *)tls_log_space,
       "sm_tx_log object can only be safely used by the thread that created it");
   DIE_IF(not tls_log_space_used, "Attempt to access unallocated memory");
   return get_impl(x);
 }
-}
+}  // namespace
 
 namespace ermia {
 
 void sm_tx_log::log_insert_index(FID f, OID o, fat_ptr ptr, int abits,
                                  fat_ptr *pdest) {
-  get_log_impl(this)
-      ->add_payload_request(LOG_INSERT_INDEX, f, o, ptr, abits, pdest);
+  get_log_impl(this)->add_payload_request(LOG_INSERT_INDEX, f, o, ptr, abits,
+                                          pdest);
 }
 
 void sm_tx_log::log_insert(FID f, OID o, fat_ptr ptr, int abits,
@@ -48,13 +48,13 @@ void sm_tx_log::log_insert(FID f, OID o, fat_ptr ptr, int abits,
 
 void sm_tx_log::log_update(FID f, OID o, fat_ptr ptr, int abits,
                            fat_ptr *pdest) {
-	//std::cerr << "sm_tx_log: " << this << std::endl;
+  // std::cerr << "sm_tx_log: " << this << std::endl;
   get_log_impl(this)->add_payload_request(LOG_UPDATE, f, o, ptr, abits, pdest);
 }
 
 void sm_tx_log::log_update_key(FID f, OID o, fat_ptr ptr, int abits) {
-  get_log_impl(this)
-      ->add_payload_request(LOG_UPDATE_KEY, f, o, ptr, abits, nullptr);
+  get_log_impl(this)->add_payload_request(LOG_UPDATE_KEY, f, o, ptr, abits,
+                                          nullptr);
 }
 
 void sm_tx_log::log_index(FID tuple_fid, FID key_fid, const std::string &name) {
@@ -102,8 +102,8 @@ void sm_tx_log::log_delete(FID f, OID o) {
 }
 
 void sm_tx_log::log_enhanced_delete(FID f, OID o, fat_ptr ptr, int abits) {
-  get_log_impl(this)
-      ->add_payload_request(LOG_ENHANCED_DELETE, f, o, ptr, abits, nullptr);
+  get_log_impl(this)->add_payload_request(LOG_ENHANCED_DELETE, f, o, ptr, abits,
+                                          nullptr);
 }
 
 LSN sm_tx_log::get_clsn() {
@@ -198,7 +198,7 @@ void sm_tx_log_impl::add_payload_request(log_record_type type, FID f, OID o,
     p = req.payload_ptr = _log->lsn2ptr(b->payload_lsn(0), false);
     format_extra_ptr(req);
     if (pdest) {
-			printf("Hi\n");
+      printf("Hi\n");
       *pdest = p;
       pdest = NULL;
     }
@@ -288,8 +288,7 @@ void sm_tx_log_impl::_populate_block(log_block *b) {
    their intent to enter pre-commit. It should never be accessed or
    freed.
  */
-static log_allocation *const ENTERING_PRECOMMIT =
-    (log_allocation *)0x1;
+static log_allocation *const ENTERING_PRECOMMIT = (log_allocation *)0x1;
 
 /* Sometimes the log block overflows before a transaction completes
    and we have to spill and overflow block to the log.

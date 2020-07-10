@@ -1,8 +1,8 @@
+#include "sm-rep-rdma.h"
 #include <x86intrin.h>
+#include "../ermia.h"
 #include "rcu.h"
 #include "sm-rep.h"
-#include "sm-rep-rdma.h"
-#include "../ermia.h"
 
 namespace ermia {
 namespace rep {
@@ -36,7 +36,7 @@ void primary_rdma_wait_for_message(uint64_t msg, bool reset) {
 
 // Helper function that brings up a backup server
 void bring_up_backup_rdma(RdmaNode* rn, int chkpt_fd,
-                          backup_start_metadata *md) {
+                          backup_start_metadata* md) {
   // Now can really send something, metadata first, header must fit in the
   // buffer
   ALWAYS_ASSERT(md->size() < RdmaNode::kDaemonBufferSize);
@@ -54,9 +54,9 @@ void bring_up_backup_rdma(RdmaNode* rn, int chkpt_fd,
     if (buf_offset == RdmaNode::kDaemonBufferSize) {
       buf_offset = 0;
     }
-    uint64_t n = os_pread(chkpt_fd, daemon_buffer + buf_offset,
-                          std::min(to_send, RdmaNode::kDaemonBufferSize - buf_offset),
-                          foff);
+    uint64_t n = os_pread(
+        chkpt_fd, daemon_buffer + buf_offset,
+        std::min(to_send, RdmaNode::kDaemonBufferSize - buf_offset), foff);
     foff += n;
     LOG_IF(FATAL, n == 0) << "Cannot read more";
     to_send -= n;
@@ -72,12 +72,13 @@ void bring_up_backup_rdma(RdmaNode* rn, int chkpt_fd,
   // Publish each node's address in the daemon buffer for backups to know, so
   // that they know whom to talk to after a failure/take-over
   for (uint32_t i = 0; i < nodes.size(); ++i) {
-    memcpy(daemon_buffer + i * INET_ADDRSTRLEN, nodes[i]->GetClientAddress(), INET_ADDRSTRLEN);
+    memcpy(daemon_buffer + i * INET_ADDRSTRLEN, nodes[i]->GetClientAddress(),
+           INET_ADDRSTRLEN);
     LOG(INFO) << nodes[i]->GetClientAddress();
   }
   rn->WaitForMessageAsPrimary(kRdmaReadyToReceive);
-  rn->RdmaWriteImmDaemonBuffer(0, 0,
-    nodes.size() * INET_ADDRSTRLEN, nodes.size() * INET_ADDRSTRLEN);
+  rn->RdmaWriteImmDaemonBuffer(0, 0, nodes.size() * INET_ADDRSTRLEN,
+                               nodes.size() * INET_ADDRSTRLEN);
 
   // Wait for the backup to become ready for receiving log records,
   // but don't reset so when start to ship we still get ReadyToReceive
@@ -105,7 +106,7 @@ void primary_daemon_rdma() {
 
   // Fire workers to do the real job - must do this after got all backups
   // as we need to broadcast to everyone the complete list of all backup nodes
-  for (auto &rn : nodes) {
+  for (auto& rn : nodes) {
     workers.push_back(new std::thread(bring_up_backup_rdma, rn, chkpt_fd, md));
   }
 
@@ -114,18 +115,19 @@ void primary_daemon_rdma() {
   }
   os_close(chkpt_fd);
 
-  for (auto &rn : nodes) {
+  for (auto& rn : nodes) {
     rn->SetActive();
   }
 
   // All done, start async shipping daemon if needed
   if (config::persist_policy == config::kPersistAsync) {
-    primary_async_ship_daemon = std::move(std::thread(PrimaryAsyncShippingDaemon));
+    primary_async_ship_daemon =
+        std::move(std::thread(PrimaryAsyncShippingDaemon));
   }
 
   // Expect more in case there is someone who wants to join during benchmark run
   while (!config::IsShutdown()) {
-    RdmaNode *rn = new RdmaNode(true);
+    RdmaNode* rn = new RdmaNode(true);
     {
       std::unique_lock<std::mutex> lock(nodes_lock);
       nodes.push_back(rn);
@@ -134,7 +136,7 @@ void primary_daemon_rdma() {
     bring_up_backup_rdma(rn, chkpt_fd, md);
     // Set the node to be active after shipping the first batch for correct
     // control flow poll
-    //rn->WaitForMessageAsPrimary(kRdmaReadyToReceive);
+    // rn->WaitForMessageAsPrimary(kRdmaReadyToReceive);
     rn->SetInitialized();
     DLOG(INFO) << "New node " << rn->GetClientAddress() << " ready to receive";
     os_close(chkpt_fd);
@@ -160,9 +162,9 @@ void send_log_files_after_rdma(RdmaNode* self, backup_start_metadata* md) {
       int log_fd = os_openat(dfd, ls->file_name.buf, O_RDONLY);
       uint64_t off = ls->data_start;
       while (to_send) {
-        uint64_t n =
-            os_pread(log_fd, daemon_buffer,
-                 std::min((uint64_t)RdmaNode::kDaemonBufferSize, to_send), off);
+        uint64_t n = os_pread(
+            log_fd, daemon_buffer,
+            std::min((uint64_t)RdmaNode::kDaemonBufferSize, to_send), off);
         ALWAYS_ASSERT(n);
         self->WaitForMessageAsPrimary(kRdmaReadyToReceive);
         self->RdmaWriteImmDaemonBuffer(0, 0, n, n);
@@ -200,7 +202,8 @@ bool BackupReceiveBoundsArrayRdma(ReplayPipelineStage& pipeline_stage) {
     LOG(INFO) << "Got shutdown signal from primary, exit.";
     return false;
   }
-  ALWAYS_ASSERT(bounds_array_size == sizeof(uint64_t) * config::log_redo_partitions);
+  ALWAYS_ASSERT(bounds_array_size ==
+                sizeof(uint64_t) * config::log_redo_partitions);
 
 #ifndef NDEBUG
   for (uint32_t i = 0; i < config::log_redo_partitions; ++i) {
@@ -218,8 +221,7 @@ bool BackupReceiveBoundsArrayRdma(ReplayPipelineStage& pipeline_stage) {
   // one of the two global stages used by redo threads;
   // for background replay, however, it should be a temporary
   // one which will be later copied to the two global stages.
-  memcpy(pipeline_stage.log_redo_partition_bounds,
-         log_redo_partition_bounds,
+  memcpy(pipeline_stage.log_redo_partition_bounds, log_redo_partition_bounds,
          config::log_redo_partitions * sizeof(uint64_t));
   for (uint32_t i = 0; i < config::log_redo_partitions; ++i) {
     pipeline_stage.consumed[i] = false;
@@ -229,7 +231,7 @@ bool BackupReceiveBoundsArrayRdma(ReplayPipelineStage& pipeline_stage) {
 }
 
 // Receive log data from the primary. The only caller is the backup daemon.
-LSN BackupReceiveLogData(LSN& start_lsn, uint64_t &size) {
+LSN BackupReceiveLogData(LSN& start_lsn, uint64_t& size) {
   // post an RR to get the data and the chunk's begin LSN embedded as an the
   // wr_id
   uint32_t imm = 0;
@@ -285,7 +287,7 @@ void BackupDaemonRdma() {
 
   received_log_size = 0;
   uint32_t recv_idx = 0;
-  ReplayPipelineStage *stage = nullptr;
+  ReplayPipelineStage* stage = nullptr;
   if (config::replay_policy == config::kReplayBackground) {
     stage = new ReplayPipelineStage;
   }
@@ -393,8 +395,8 @@ void start_as_backup_rdma() {
   int dfd = dir.dup();
   for (uint64_t i = 0; i < md->num_log_files; ++i) {
     backup_start_metadata::log_segment* ls = md->get_log_segment(i);
-    LOG(INFO) << "Getting log segment " << ls->file_name.buf << ", "
-              << ls->size << " bytes, start at " << ls->data_start;
+    LOG(INFO) << "Getting log segment " << ls->file_name.buf << ", " << ls->size
+              << " bytes, start at " << ls->data_start;
     uint64_t file_size = ls->size;
     uint64_t off = ls->data_start;
     int log_fd = os_openat(dfd, ls->file_name.buf, O_CREAT | O_WRONLY);
@@ -417,7 +419,8 @@ void start_as_backup_rdma() {
   uint64_t nodes = received_bytes / INET_ADDRSTRLEN;
   for (uint64_t i = 0; i < nodes; ++i) {
     all_backup_nodes.emplace_back(buf + i * INET_ADDRSTRLEN);
-    LOG(INFO) << "Backup node: " << all_backup_nodes[all_backup_nodes.size()-1];
+    LOG(INFO) << "Backup node: "
+              << all_backup_nodes[all_backup_nodes.size() - 1];
   }
 
   // Extract system config and set them before new_log
@@ -460,7 +463,8 @@ void primary_ship_log_buffer_rdma(const char* buf, uint32_t size, bool new_seg,
     // Partition boundary information
     bounds_req.local_index = bounds_req.remote_index = node->GetBoundsIndex();
     bounds_req.local_offset = bounds_req.remote_offset = 0;
-    bounds_req.size = bounds_req.imm_data = sizeof(uint64_t) * config::log_redo_partitions;
+    bounds_req.size = bounds_req.imm_data =
+        sizeof(uint64_t) * config::log_redo_partitions;
     bounds_req.sync = false;
     bounds_req.next = &data_req;
 
@@ -491,7 +495,7 @@ void primary_ship_log_buffer_rdma(const char* buf, uint32_t size, bool new_seg,
 
 void primary_rdma_set_global_persisted_lsn(uint64_t lsn) {
   std::unique_lock<std::mutex> lock(nodes_lock);
-  for (auto &rn : nodes) {
+  for (auto& rn : nodes) {
     if (!rn->IsActive()) {
       continue;
     }

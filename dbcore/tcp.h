@@ -3,8 +3,8 @@
 #include <vector>
 
 #include <arpa/inet.h>
-#include <netinet/in.h>
 #include <netdb.h>
+#include <netinet/in.h>
 #include <sys/fcntl.h>
 #include <sys/sendfile.h>
 #include <sys/socket.h>
@@ -50,7 +50,7 @@ struct server_context {
     }
   }
   inline const char* get_sock_addr() { return sock_addr; }
-  int expect_client(char *client_addr = nullptr);
+  int expect_client(char* client_addr = nullptr);
 };
 
 struct client_context {

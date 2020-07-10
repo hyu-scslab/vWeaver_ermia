@@ -1,10 +1,10 @@
+#include "sm-log-recover-impl.h"
 #include "../ermia.h"
 #include "../util.h"
 #include "sm-index.h"
-#include "sm-log-recover-impl.h"
-#include "sm-oid.h"
-#include "sm-oid-impl.h"
 #include "sm-oid-alloc-impl.h"
+#include "sm-oid-impl.h"
+#include "sm-oid.h"
 #include "sm-rep.h"
 
 namespace ermia {
@@ -46,7 +46,7 @@ void sm_log_recover_impl::recover_insert(sm_log_scan_mgr::record_scan* logrec,
       fat_ptr* entry_ptr = oa->get(o);
       if (volatile_read(entry_ptr->_ptr) == 0) {
         fat_ptr ptr = PrepareObject(logrec);
-        Object *obj = (Object*)ptr.offset();
+        Object* obj = (Object*)ptr.offset();
         // Fully instantiate the version
         obj->Pin(config::persist_policy != config::kPersistAsync);
         if (!__sync_bool_compare_and_swap(&entry_ptr->_ptr, 0, ptr._ptr)) {
@@ -134,8 +134,8 @@ void sm_log_recover_impl::recover_index_insert(
 
   varstr payload_key((char*)payload_buf + sizeof(varstr), len);
   // FIXME(tzwang): support other index types
-  if (((ConcurrentMasstreeIndex*)index)->masstree_.insert_if_absent(payload_key, logrec->oid(),
-                                                     NULL)) {
+  if (((ConcurrentMasstreeIndex*)index)
+          ->masstree_.insert_if_absent(payload_key, logrec->oid(), NULL)) {
     // Don't add the key on backup - on backup chkpt will traverse OID arrays
     if (!config::is_backup_srv()) {
       // Construct the varkey to be inserted in the oid array

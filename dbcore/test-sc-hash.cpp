@@ -1,12 +1,12 @@
 #include "sc-hash.h"
 
-#include "sm-common.h"
 #include "burt-hash.h"
+#include "sm-common.h"
 #include "stopwatch.h"
 #include "w_rand.h"
 
-#include <unistd.h>
 #include <cxxabi.h>
+#include <unistd.h>
 #include <cmath>
 
 /* A way to track mean and variance of a large sample accurately with O(1)

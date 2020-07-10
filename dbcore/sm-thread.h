@@ -10,9 +10,9 @@
 
 #include <sys/stat.h>
 
+#include "../util.h"
 #include "sm-defs.h"
 #include "xid.h"
-#include "../util.h"
 
 namespace ermia {
 namespace thread {
@@ -70,8 +70,8 @@ struct Thread {
 
   void IdleTask();
   static void *StaticIdleTask(void *context) {
-      ((Thread *)context)->IdleTask();
-      return nullptr;
+    ((Thread *)context)->IdleTask();
+    return nullptr;
   }
 
   // No CC whatsoever, caller must know what it's doing
@@ -89,7 +89,10 @@ struct Thread {
     }
   }
 
-  inline void Join() { while (volatile_read(state) == kStateHasWork) {} }
+  inline void Join() {
+    while (volatile_read(state) == kStateHasWork) {
+    }
+  }
   inline bool TryJoin() { return volatile_read(state) != kStateHasWork; }
   inline void Destroy() { volatile_write(shutdown, true); }
 };
@@ -109,7 +112,7 @@ struct PerNodeThreadPool {
   // the same phyiscal core. Similar to GetThread, but continue to also allocate
   // the logical threads that follow immediately the physical thread in the
   // bitmap.
-  bool GetThreadGroup(std::vector<Thread*> &thread_group);
+  bool GetThreadGroup(std::vector<Thread *> &thread_group);
 
   // Release a thread back to the pool
   inline void PutThread(Thread *t) {
@@ -135,11 +138,12 @@ inline Thread *GetThread(bool physical /* don't care where */) {
 }
 
 // Return all the threads (physical + logical) on the same physical core
-inline bool GetThreadGroup(uint16_t from, std::vector<Thread*> &threads) {
+inline bool GetThreadGroup(uint16_t from, std::vector<Thread *> &threads) {
   return thread_pools[from].GetThreadGroup(threads);
 }
 
-inline bool GetThreadGroup(std::vector<Thread*> &threads /* don't care where */) {
+inline bool GetThreadGroup(
+    std::vector<Thread *> &threads /* don't care where */) {
   for (uint16_t i = 0; i < config::numa_nodes; i++) {
     if (thread_pools[i].GetThreadGroup(threads)) {
       break;
@@ -174,7 +178,8 @@ struct Runner {
     ALWAYS_ASSERT(not me);
     me = thread::GetThread(physical);
     if (me) {
-      LOG_IF(FATAL, me->is_physical != physical) << "Not the requested thread type";
+      LOG_IF(FATAL, me->is_physical != physical)
+          << "Not the requested thread type";
       me->sleep_when_idle = sleep_when_idle;
     }
     return me != nullptr;
@@ -184,7 +189,8 @@ struct Runner {
     ALWAYS_ASSERT(not me);
     me = thread::GetThread(node, physical);
     if (me) {
-      LOG_IF(FATAL, me->is_physical != physical) << "Not the requested thread type";
+      LOG_IF(FATAL, me->is_physical != physical)
+          << "Not the requested thread type";
       me->sleep_when_idle = sleep_when_idle;
     }
     return me != nullptr;

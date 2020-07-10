@@ -1,9 +1,9 @@
-#include "sm-alloc.h"
-#include "sm-chkpt.h"
-#include "sm-log.h"
-#include "sm-log-recover.h"
 #include "sm-object.h"
 #include "../tuple.h"
+#include "sm-alloc.h"
+#include "sm-chkpt.h"
+#include "sm-log-recover.h"
+#include "sm-log.h"
 
 namespace ermia {
 
@@ -112,15 +112,15 @@ fat_ptr Object::Create(const varstr *tuple_value, bool do_write,
 
   // Calculate tuple size
   const uint32_t data_sz = tuple_value ? tuple_value->size() : 0;
-  /*uint32_t data_sz = tuple_value ? tuple_value->size() : 0; 
+  /*uint32_t data_sz = tuple_value ? tuple_value->size() : 0;
 #ifdef HYU_MOTIVATION
-	if (tuple_value && (tuple_value->data() == (uint8_t*)0x4 ||
-				tuple_value->data() == (uint8_t*)0x8)) {
-		data_sz = 0;
-		do_write = false;
-	}
+        if (tuple_value && (tuple_value->data() == (uint8_t*)0x4 ||
+                                tuple_value->data() == (uint8_t*)0x8)) {
+                data_sz = 0;
+                do_write = false;
+        }
 #endif*/
-	size_t alloc_sz = sizeof(dbtuple) + sizeof(Object) + data_sz;
+  size_t alloc_sz = sizeof(dbtuple) + sizeof(Object) + data_sz;
 
   // Allocate a version
   Object *obj = new (MM::allocate(alloc_sz)) Object();
@@ -128,27 +128,27 @@ fat_ptr Object::Create(const varstr *tuple_value, bool do_write,
   ASSERT(obj->GetAllocateEpoch() <= epoch - 4);
   obj->SetAllocateEpoch(epoch);
 #ifdef HYU_VWEAVER /* HYU_VWEAVER */
-	obj->SetHighway(NULL_PTR);
-	obj->SetHighwayClsn(NULL_PTR);
-	obj->SetLeftShortcut(NULL_PTR);
-	obj->SetLevel(1);
-	obj->SetHighwayLevel(0);
+  obj->SetHighway(NULL_PTR);
+  obj->SetHighwayClsn(NULL_PTR);
+  obj->SetLeftShortcut(NULL_PTR);
+  obj->SetLevel(1);
+  obj->SetHighwayLevel(0);
 #endif /* HYU_VWEAVER */
-	
-	// Tuple setup
+
+  // Tuple setup
   dbtuple *tuple = (dbtuple *)obj->GetPayload();
   new (tuple) dbtuple(data_sz);
   ASSERT(tuple->pvalue == NULL);
-/*#ifdef HYU_MOTIVATION
-	if (tuple_value && (tuple_value->data() == (uint8_t*)0x4 ||
-				tuple_value->data() == (uint8_t*)0x8)) {
-		tuple->pvalue = NULL;
-	} else {
-		tuple->pvalue = (varstr *)tuple_value;
-	}
-#else
-  tuple->pvalue = (varstr *)tuple_value;
-#endif*/
+  /*#ifdef HYU_MOTIVATION
+          if (tuple_value && (tuple_value->data() == (uint8_t*)0x4 ||
+                                  tuple_value->data() == (uint8_t*)0x8)) {
+                  tuple->pvalue = NULL;
+          } else {
+                  tuple->pvalue = (varstr *)tuple_value;
+          }
+  #else
+    tuple->pvalue = (varstr *)tuple_value;
+  #endif*/
   tuple->pvalue = (varstr *)tuple_value;
   if (do_write) {
     tuple->DoWrite();

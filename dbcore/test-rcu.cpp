@@ -1,17 +1,17 @@
-#include "rcu.h"
 #include "rcu-slist.h"
+#include "rcu.h"
 
-#include "w_rand.h"
 #include "stopwatch.h"
+#include "w_rand.h"
 
-#include <stdint.h>
 #include <pthread.h>
-#include <vector>
-#include <cstdio>
+#include <stdint.h>
 #include <unistd.h>
+#include <cstdio>
 #include <cstdlib>
 #include <map>
 #include <set>
+#include <vector>
 
 using namespace RCU;
 

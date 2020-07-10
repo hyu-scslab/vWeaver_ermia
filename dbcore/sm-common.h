@@ -6,18 +6,18 @@
 #include "sm-defs.h"
 #include "sm-exceptions.h"
 
-#include "size-encode.h"
 #include "defer.h"
+#include "size-encode.h"
 
-#include <cstddef>
+#include <pthread.h>
 #include <stdarg.h>
 #include <stdint.h>
-#include <pthread.h>
+#include <cstddef>
 
+#include <assert.h>
 #include <dirent.h>
 #include <sys/stat.h>
 #include <cerrno>
-#include <assert.h>
 
 namespace ermia {
 
@@ -237,8 +237,9 @@ struct LSN {
         p.asi_type() != fat_ptr::ASI_LOG and p.asi_type() != fat_ptr::ASI_EXT,
         illegal_argument, "Attempt to convert non-LSN fat_ptr to LSN");*/
 
-		//printf("p.asi_type(): %d\n", p.asi_type());
-		ASSERT(p.asi_type() == fat_ptr::ASI_LOG || p.asi_type() == fat_ptr::ASI_EXT);
+    // printf("p.asi_type(): %d\n", p.asi_type());
+    ASSERT(p.asi_type() == fat_ptr::ASI_LOG ||
+           p.asi_type() == fat_ptr::ASI_EXT);
 
     return LSN::make(p.offset(), p.asi_segment());
   }
@@ -307,7 +308,7 @@ struct XID {
 
   static XID from_ptr(fat_ptr const &p) {
     LOG_IF(FATAL, p.asi_type() != fat_ptr::ASI_XID)
-      << "Attempt to convert non-XID fat_ptr to XID";
+        << "Attempt to convert non-XID fat_ptr to XID";
     return XID{p._ptr};
   }
 

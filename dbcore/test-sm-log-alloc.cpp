@@ -1,15 +1,16 @@
 #include "sm-log-alloc.h"
 
-#include "w_rand.h"
 #include "stopwatch.h"
+#include "w_rand.h"
 
 #include <unistd.h>
 
 using namespace RCU;
 
 void doit(w_rand &rng) {
-  auto no_recover = [](void *, sm_log_scan_mgr *, LSN, LSN)
-                        -> void { SPAM("Log recovery is a no-op here\n"); };
+  auto no_recover = [](void *, sm_log_scan_mgr *, LSN, LSN) -> void {
+    SPAM("Log recovery is a no-op here\n");
+  };
 
   tmp_dir dname;
   sm_log_alloc_mgr lm(dname, 1024, no_recover, NULL, 1 * 1024 * 1024);

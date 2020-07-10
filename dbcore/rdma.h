@@ -165,9 +165,15 @@ struct context {
     uint32_t imm_data;
     bool sync;
     write_request *next;
-    write_request() : local_index(0), local_offset(0),
-                           remote_index(0), remote_offset(0),
-                           size(0), imm_data(0), sync(true), next(nullptr) {}
+    write_request()
+        : local_index(0),
+          local_offset(0),
+          remote_index(0),
+          remote_offset(0),
+          size(0),
+          imm_data(0),
+          sync(true),
+          next(nullptr) {}
     ~write_request() {}
   };
 

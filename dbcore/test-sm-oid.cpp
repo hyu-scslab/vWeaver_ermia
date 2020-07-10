@@ -6,9 +6,9 @@
 #include <set>
 #include <vector>
 
-#include <cmath>
 #include <pthread.h>
 #include <unistd.h>
+#include <cmath>
 
 #define LOG(msg, ...) fprintf(stderr, msg "\n", ##__VA_ARGS__)
 
@@ -23,7 +23,10 @@ extern "C" void *thread_main(void *arg) {
 
   uint64_t now = stopwatch_t::now();
   uint32_t seed[] = {
-      (uint32_t)(now >> 32), (uint32_t)now, (uint32_t)getpid(), (uint32_t)tnum,
+      (uint32_t)(now >> 32),
+      (uint32_t)now,
+      (uint32_t)getpid(),
+      (uint32_t)tnum,
   };
   LOG("t%d seed: {0x%08x 0x%08x 0x%08x 0x%08x}", tnum, seed[0], seed[1],
       seed[2], seed[3]);

@@ -2,8 +2,8 @@
 
 #include "../ermia.h"
 #include "sm-config.h"
-#include "sm-thread.h"
 #include "sm-log-recover.h"
+#include "sm-thread.h"
 
 namespace ermia {
 
@@ -41,7 +41,11 @@ struct parallel_oid_replay : public sm_log_recover_impl {
     LSN replayed_lsn;
 
     redo_runner(parallel_oid_replay *o, OID part)
-        : thread::Runner(), owner(o), oid_partition(part), done(false), replayed_lsn(INVALID_LSN) {}
+        : thread::Runner(),
+          owner(o),
+          oid_partition(part),
+          done(false),
+          replayed_lsn(INVALID_LSN) {}
     virtual void MyWork(char *);
     void redo_partition();
   };
@@ -53,8 +57,7 @@ struct parallel_oid_replay : public sm_log_recover_impl {
   LSN end_lsn;
 
   parallel_oid_replay(uint32_t threads) : nredoers(threads) {}
-  virtual LSN operator()(void *arg, sm_log_scan_mgr *scanner, LSN from,
-                         LSN to);
+  virtual LSN operator()(void *arg, sm_log_scan_mgr *scanner, LSN from, LSN to);
 };
 
 // A special case that each thread will replay a given range of LSN offsets
@@ -71,8 +74,13 @@ struct parallel_offset_replay : public sm_log_recover_impl {
     uint64_t redo_batches;
 
     redo_runner(parallel_offset_replay *o, LSN start, LSN end)
-        : thread::Runner(), owner(o), start_lsn(start),
-          end_lsn(end), redo_latency_us(0), redo_size(0), redo_batches(0) {}
+        : thread::Runner(),
+          owner(o),
+          start_lsn(start),
+          end_lsn(end),
+          redo_latency_us(0),
+          redo_size(0),
+          redo_batches(0) {}
     virtual void MyWork(char *);
     void redo_logbuf_partition();
     void persist_logbuf_partition();
@@ -85,7 +93,6 @@ struct parallel_offset_replay : public sm_log_recover_impl {
   parallel_offset_replay() : nredoers(config::replay_threads) {
     LOG(INFO) << "[Backup] " << nredoers << " replay threads";
   }
-  virtual LSN operator()(void *arg, sm_log_scan_mgr *scanner, LSN from,
-                         LSN to);
+  virtual LSN operator()(void *arg, sm_log_scan_mgr *scanner, LSN from, LSN to);
 };
 }  // namespace ermia

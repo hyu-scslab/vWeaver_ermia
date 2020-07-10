@@ -2,8 +2,8 @@
 #include <sys/mman.h>
 #include <chrono>
 #include <condition_variable>
-#include <thread>
 #include <mutex>
+#include <thread>
 #include "sm-common.h"
 #include "sm-log-impl.h"
 #include "sm-oid.h"

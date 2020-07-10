@@ -125,7 +125,7 @@ void thread_init() {
   success = true;
 
 #ifdef HYU_VWEAVER /* HYU_VWEAVER */
-	seed = (uint64_t)tid;
+  seed = (uint64_t)tid;
 #endif /* HYU_VWEAVER */
 
   tls = tmp;
@@ -449,7 +449,8 @@ void sm_oid_mgr::PrimaryTakeChkpt() {
 iterate_index:
   for (auto &fm : IndexDescriptor::name_map) {
     IndexDescriptor *id = fm.second;
-    if (!((id->IsPrimary() && !handling_2nd) || (!id->IsPrimary() && handling_2nd))) {
+    if (!((id->IsPrimary() && !handling_2nd) ||
+          (!id->IsPrimary() && handling_2nd))) {
       continue;
     }
     size_t len = id->GetName().length();
@@ -672,80 +673,80 @@ void sm_oid_mgr::oid_put_new_if_absent(FID f, OID o, fat_ptr p) {
 
 #ifdef HYU_VWEAVER /* HYU_VWEAVER */
 /* bool @out 	true if success to submit highway chain */
-bool sm_oid_mgr::SubmitHighwayChain(Object* new_obj, fat_ptr old_ptr) {
-	fat_ptr next_ptr = volatile_read(old_ptr);
-	Object* new_object = new_obj;
-	Object* next = (Object*)next_ptr.offset();
-	uint64_t hw_level;
-	uint64_t my_level = (uint64_t)new_object->GetLevel();
-	uint64_t watermark = volatile_read(MM::gc_lsn);
-	fat_ptr clsn;
+bool sm_oid_mgr::SubmitHighwayChain(Object *new_obj, fat_ptr old_ptr) {
+  fat_ptr next_ptr = volatile_read(old_ptr);
+  Object *new_object = new_obj;
+  Object *next = (Object *)next_ptr.offset();
+  uint64_t hw_level;
+  uint64_t my_level = (uint64_t)new_object->GetLevel();
+  uint64_t watermark = volatile_read(MM::gc_lsn);
+  fat_ptr clsn;
 
-	// If coin toss result is tail, get lowest level.
-	// v_ridgy is same as next
-	if (my_level == 1) {
-		clsn = next->GetClsn();
+  // If coin toss result is tail, get lowest level.
+  // v_ridgy is same as next
+  if (my_level == 1) {
+    clsn = next->GetClsn();
 
-		if (watermark > LSN::from_ptr(clsn).offset())
-			return false;
+    if (watermark > LSN::from_ptr(clsn).offset()) return false;
 
-		ASSERT(next->GetClsn().asi_type() == fat_ptr::ASI_LOG);
+    ASSERT(next->GetClsn().asi_type() == fat_ptr::ASI_LOG);
 
-		new_object->SetHighway(next_ptr);
-		new_object->SetHighwayClsn(next->GetClsn());
-		new_object->SetHighwayLevel(next->GetLevel());
-		
-		return true;
-	}
+    new_object->SetHighway(next_ptr);
+    new_object->SetHighwayClsn(next->GetClsn());
+    new_object->SetHighwayLevel(next->GetLevel());
 
-	// If coin toss result is head, go stacking. We have to find v_ridgy through
-	// traversing next's v_ridgy. If a version's level is same or bigger than my
-	// level, connecting v_ridgy.
-	while (1) {
-		hw_level = (uint64_t)next->GetHighwayLevel();
+    return true;
+  }
 
-		if (hw_level >= my_level) {
+  // If coin toss result is head, go stacking. We have to find v_ridgy through
+  // traversing next's v_ridgy. If a version's level is same or bigger than my
+  // level, connecting v_ridgy.
+  while (1) {
+    hw_level = (uint64_t)next->GetHighwayLevel();
 
-			clsn = next->GetHighwayClsn();
+    if (hw_level >= my_level) {
+      clsn = next->GetHighwayClsn();
 
-			if (clsn.asi_type() != fat_ptr::ASI_LOG ||
-					watermark > LSN::from_ptr(clsn).offset())
-				return false;
-		
-			// if new version try to set highway with GCed object, stop
-			Object* highway = (Object*)(next->GetHighway().offset());
-			if (highway->GetClsn()._ptr == 0 || highway->GetClsn().asi_type() != fat_ptr::ASI_LOG ||
-					LSN::from_ptr(highway->GetClsn()).offset() != LSN::from_ptr(clsn).offset()) {
-				return false;
-			}
+      if (clsn.asi_type() != fat_ptr::ASI_LOG ||
+          watermark > LSN::from_ptr(clsn).offset())
+        return false;
 
-			if ((uint64_t)highway->GetLevel() < my_level) return false;
+      // if new version try to set highway with GCed object, stop
+      Object *highway = (Object *)(next->GetHighway().offset());
+      if (highway->GetClsn()._ptr == 0 ||
+          highway->GetClsn().asi_type() != fat_ptr::ASI_LOG ||
+          LSN::from_ptr(highway->GetClsn()).offset() !=
+              LSN::from_ptr(clsn).offset()) {
+        return false;
+      }
 
-			new_object->SetHighway(next->GetHighway());
-			new_object->SetHighwayClsn(highway->GetClsn());
-			new_object->SetHighwayLevel(highway->GetLevel());
-			//new_object->SetHighwayClsn(next->GetHighwayClsn());
-			//new_object->SetHighwayLevel(next->GetHighwayLevel());
-			return true;
-		} else {
-			next_ptr = next->GetHighway();
-			if (next_ptr == NULL_PTR)
-				break;
+      if ((uint64_t)highway->GetLevel() < my_level) return false;
 
-			Object* highway = (Object*)(next->GetHighway().offset());
-			if (highway->GetClsn() == NULL_PTR || highway->GetClsn().asi_type() != fat_ptr::ASI_LOG ||
-					LSN::from_ptr(highway->GetClsn()).offset() != LSN::from_ptr(next->GetHighwayClsn()).offset()) {
-				return false;
-			}
+      new_object->SetHighway(next->GetHighway());
+      new_object->SetHighwayClsn(highway->GetClsn());
+      new_object->SetHighwayLevel(highway->GetLevel());
+      // new_object->SetHighwayClsn(next->GetHighwayClsn());
+      // new_object->SetHighwayLevel(next->GetHighwayLevel());
+      return true;
+    } else {
+      next_ptr = next->GetHighway();
+      if (next_ptr == NULL_PTR) break;
 
-			next = (Object*)next_ptr.offset();
+      Object *highway = (Object *)(next->GetHighway().offset());
+      if (highway->GetClsn() == NULL_PTR ||
+          highway->GetClsn().asi_type() != fat_ptr::ASI_LOG ||
+          LSN::from_ptr(highway->GetClsn()).offset() !=
+              LSN::from_ptr(next->GetHighwayClsn()).offset()) {
+        return false;
+      }
 
-			uint64_t hwlv = (uint64_t)next->GetHighwayLevel();
-			if (hwlv < hw_level)
-				break;
-		}
-	}
-	return false;
+      next = (Object *)next_ptr.offset();
+
+      uint64_t hwlv = (uint64_t)next->GetHighwayLevel();
+      if (hwlv < hw_level) break;
+    }
+  }
+  return false;
 }
 #endif /* HYU_VWEAVER */
 
@@ -762,8 +763,9 @@ fat_ptr sm_oid_mgr::PrimaryTupleUpdate(oid_array *oa, OID o,
                                        const varstr *value,
                                        TXN::xid_context *updater_xc,
                                        fat_ptr *new_obj_ptr) {
-  ASSERT(!config::is_backup_srv() || (config::command_log && config::replay_threads));
-	auto *ptr = oa->get(o);
+  ASSERT(!config::is_backup_srv() ||
+         (config::command_log && config::replay_threads));
+  auto *ptr = oa->get(o);
 start_over:
   fat_ptr head = volatile_read(*ptr);
   ASSERT(head.asi_type() == 0);
@@ -848,18 +850,18 @@ install:
   ASSERT(new_obj_ptr->asi_type() == 0);
   Object *new_object = (Object *)new_obj_ptr->offset();
   new_object->SetClsn(updater_xc->owner.to_ptr());
-	// HYU_GC
-	//new_object->HYU_gc_candidate_clsn_ = volatile_read(MM::gc_lsn);
-	// HYU_GC end
+  // HYU_GC
+  // new_object->HYU_gc_candidate_clsn_ = volatile_read(MM::gc_lsn);
+  // HYU_GC end
   if (overwrite) {
     new_object->SetNextPersistent(old_desc->GetNextPersistent());
-    new_object->SetNextVolatile(old_desc->GetNextVolatile());		
+    new_object->SetNextVolatile(old_desc->GetNextVolatile());
 #ifdef HYU_VWEAVER /* HYU_VWEAVER */
-		new_object->SetHighway(old_desc->GetHighway());
-		new_object->SetHighwayClsn(old_desc->GetHighwayClsn());
-		new_object->SetLevel(old_desc->GetLevel());
-		new_object->SetHighwayLevel(old_desc->GetHighwayLevel());
-		new_object->rec_id = old_desc->rec_id;
+    new_object->SetHighway(old_desc->GetHighway());
+    new_object->SetHighwayClsn(old_desc->GetHighwayClsn());
+    new_object->SetLevel(old_desc->GetLevel());
+    new_object->SetHighwayLevel(old_desc->GetHighwayLevel());
+    new_object->rec_id = old_desc->rec_id;
 #endif /* HYU_VWEAVER */
     // I already claimed it, no need to use cas then
     volatile_write(ptr->_ptr, new_obj_ptr->_ptr);
@@ -874,46 +876,46 @@ install:
     new_object->SetNextVolatile(head);
 
 #ifdef HYU_VWEAVER /* HYU_VWEAVER */
-#ifdef HYU_EVAL /* HYU_EVAL */
-		int64_t start_time, latency;
-		struct timespec vridgy_time;
-		if (!updater_xc->xct->check) {
-			clock_gettime(CLOCK_MONOTONIC, &vridgy_time);
-			start_time = (int64_t)vridgy_time.tv_nsec;
-		}
+#ifdef HYU_EVAL    /* HYU_EVAL */
+    int64_t start_time, latency;
+    struct timespec vridgy_time;
+    if (!updater_xc->xct->check) {
+      clock_gettime(CLOCK_MONOTONIC, &vridgy_time);
+      start_time = (int64_t)vridgy_time.tv_nsec;
+    }
 #endif /* HYU_EVAL */
-			// In this case, we have to set highway shortcut
-			int go_up = new_object->TossCoin(&seed);
-			uint8_t lv;
-			if (go_up) {
-				lv = old_desc->GetLevel();
-				uint64_t chk = (uint64_t)lv;
-				if (chk == MAX_LEVEL)
-					lv = 1;
-				else
-					lv++;
+    // In this case, we have to set highway shortcut
+    int go_up = new_object->TossCoin(&seed);
+    uint8_t lv;
+    if (go_up) {
+      lv = old_desc->GetLevel();
+      uint64_t chk = (uint64_t)lv;
+      if (chk == MAX_LEVEL)
+        lv = 1;
+      else
+        lv++;
 
-				new_object->SetLevel(lv);
-			} else {
-				lv = 1;
-				new_object->SetLevel(lv);
-			}
+      new_object->SetLevel(lv);
+    } else {
+      lv = 1;
+      new_object->SetLevel(lv);
+    }
 
-			bool submit = SubmitHighwayChain(new_object, head);
-			new_object->rec_id = o;
-			__sync_synchronize();
+    bool submit = SubmitHighwayChain(new_object, head);
+    new_object->rec_id = o;
+    __sync_synchronize();
 #endif /* HYU_VWEAVER */
 
     if (__sync_bool_compare_and_swap(&ptr->_ptr, head._ptr,
                                      new_obj_ptr->_ptr)) {
 #ifdef HYU_VWEAVER /* HYU_VWEAVER */
-#ifdef HYU_EVAL /* HYU_EVAL */
-			if (!updater_xc->xct->check) {
-				clock_gettime(CLOCK_MONOTONIC, &vridgy_time);
-				latency = (int64_t)vridgy_time.tv_nsec - start_time;
-				updater_xc->xct->vridgy_cost = latency;
-				updater_xc->xct->check = true;
-			}
+#ifdef HYU_EVAL    /* HYU_EVAL */
+      if (!updater_xc->xct->check) {
+        clock_gettime(CLOCK_MONOTONIC, &vridgy_time);
+        latency = (int64_t)vridgy_time.tv_nsec - start_time;
+        updater_xc->xct->vridgy_cost = latency;
+        updater_xc->xct->check = true;
+      }
 #endif /* HYU_EVAL */
 #endif /* HYU_VWEAVER */
       // Succeeded installing a new version, now only I can modify the
@@ -934,25 +936,33 @@ dbtuple *sm_oid_mgr::oid_get_latest_version(FID f, OID o) {
 }
 
 #ifdef HYU_VWEAVER /* HYU_VWEAVER */
-#ifdef HYU_DEBUG /* HYU_DEBUG */
-dbtuple *sm_oid_mgr::oid_get_version_zigzag_debug(FID f, OID o, TXN::xid_context *visitor_xc, uint64_t *cnt) {
+#ifdef HYU_DEBUG   /* HYU_DEBUG */
+dbtuple *sm_oid_mgr::oid_get_version_zigzag_debug(FID f, OID o,
+                                                  TXN::xid_context *visitor_xc,
+                                                  uint64_t *cnt) {
   ASSERT(f);
-  return oid_get_version_zigzag_debug(get_impl(this)->get_array(f), o, visitor_xc, cnt);
+  return oid_get_version_zigzag_debug(get_impl(this)->get_array(f), o,
+                                      visitor_xc, cnt);
 }
 #endif /* HYU_DEBUG */
-dbtuple *sm_oid_mgr::oid_get_version_zigzag(FID f, OID o, TXN::xid_context *visitor_xc) {
+dbtuple *sm_oid_mgr::oid_get_version_zigzag(FID f, OID o,
+                                            TXN::xid_context *visitor_xc) {
   ASSERT(f);
   return oid_get_version_zigzag(get_impl(this)->get_array(f), o, visitor_xc);
 }
 #endif /* HYU_VWEAVER */
 
 #ifdef HYU_DEBUG /* HYU_DEBUG */
-dbtuple *sm_oid_mgr::oid_get_version_debug(FID f, OID o, TXN::xid_context *visitor_xc, uint64_t *cnt) {
+dbtuple *sm_oid_mgr::oid_get_version_debug(FID f, OID o,
+                                           TXN::xid_context *visitor_xc,
+                                           uint64_t *cnt) {
   ASSERT(f);
-  return oid_get_version_debug(get_impl(this)->get_array(f), o, visitor_xc, cnt);
+  return oid_get_version_debug(get_impl(this)->get_array(f), o, visitor_xc,
+                               cnt);
 }
 #endif /* HYU_DEBUG */
-dbtuple *sm_oid_mgr::oid_get_version(FID f, OID o, TXN::xid_context *visitor_xc) {
+dbtuple *sm_oid_mgr::oid_get_version(FID f, OID o,
+                                     TXN::xid_context *visitor_xc) {
   ASSERT(f);
   return oid_get_version(get_impl(this)->get_array(f), o, visitor_xc);
 }
@@ -960,7 +970,7 @@ dbtuple *sm_oid_mgr::oid_get_version(FID f, OID o, TXN::xid_context *visitor_xc)
 dbtuple *sm_oid_mgr::BackupGetVersion(oid_array *ta, oid_array *pa, OID o,
                                       TXN::xid_context *xc) {
   if (config::full_replay || config::command_log) {
-		return oid_get_version(ta, o, xc);
+    return oid_get_version(ta, o, xc);
   }
   fat_ptr pdest_head_ptr = NULL_PTR;
 retry:
@@ -976,7 +986,7 @@ retry:
   if (active_head_lsn >= xc->begin) {
     // First version not visible to me, so no need to look at the pdest
     // array, versions indexed by the tuple array are enough.
-		return oid_get_version(ta, o, xc);
+    return oid_get_version(ta, o, xc);
   } else {
     // First version visible to me, but not sure if there will be newer
     // versions available for me to read, must look at the pdest array
@@ -1062,10 +1072,8 @@ retry:
   }
 }
 
-void sm_oid_mgr::oid_get_version_backup(fat_ptr &ptr,
-                                        fat_ptr &tentative_next,
-                                        Object *prev_obj,
-                                        Object *&cur_obj,
+void sm_oid_mgr::oid_get_version_backup(fat_ptr &ptr, fat_ptr &tentative_next,
+                                        Object *prev_obj, Object *&cur_obj,
                                         TXN::xid_context *visitor_xc) {
   fat_ptr prev_next_ptr = NULL_PTR;
   Object *prev_next_obj = NULL_PTR;
@@ -1077,7 +1085,8 @@ void sm_oid_mgr::oid_get_version_backup(fat_ptr &ptr,
     prev_next_obj = (Object *)prev_next_ptr.offset();
     ASSERT(prev_next_obj->GetClsn().offset() ==
            prev_next_obj->GetPersistentAddress().offset());
-    if (prev_next_obj->GetClsn().offset() == prev_obj->GetNextPersistent().offset() ||
+    if (prev_next_obj->GetClsn().offset() ==
+            prev_obj->GetNextPersistent().offset() ||
         prev_next_obj->GetClsn().offset() >= visitor_xc->begin) {
       // No gap or not visible
       ptr = prev_next_ptr;
@@ -1085,7 +1094,8 @@ void sm_oid_mgr::oid_get_version_backup(fat_ptr &ptr,
   }
   if (ptr.asi_type() == fat_ptr::ASI_LOG) {
     ASSERT(ptr.size_code() != INVALID_SIZE_CODE);
-    size_t alloc_sz = align_up(decode_size_aligned(ptr.size_code()) + sizeof(Object));
+    size_t alloc_sz =
+        align_up(decode_size_aligned(ptr.size_code()) + sizeof(Object));
     cur_obj = (Object *)MM::allocate(alloc_sz);
     new (cur_obj) Object(ptr, NULL_PTR, visitor_xc->begin_epoch, false);
     cur_obj->Pin();  // After this next_pdest_ is valid
@@ -1122,10 +1132,10 @@ void sm_oid_mgr::oid_get_version_backup(fat_ptr &ptr,
 #ifdef HYU_DEBUG /* HYU_DEBUG */
 // For tuple arrays only, i.e., entries are guaranteed to point to Objects.
 dbtuple *sm_oid_mgr::oid_get_version_debug(oid_array *oa, OID o,
-                                    			TXN::xid_context *visitor_xc,
-																					uint64_t *cnt) {
+                                           TXN::xid_context *visitor_xc,
+                                           uint64_t *cnt) {
   fat_ptr *entry = oa->get(o);
-	uint64_t point_cnt = 0;
+  uint64_t point_cnt = 0;
 start_over:
   fat_ptr ptr = volatile_read(*entry);
   ASSERT(ptr.asi_type() == 0);
@@ -1151,7 +1161,8 @@ start_over:
     // If this is a backup server, then must see persistent_next to find out
     // the **real** overwritten version.
     if (config::is_backup_srv() && !config::command_log) {
-      oid_get_version_backup(ptr, tentative_next, prev_obj, cur_obj, visitor_xc);
+      oid_get_version_backup(ptr, tentative_next, prev_obj, cur_obj,
+                             visitor_xc);
     } else {
       ASSERT(ptr.asi_type() == 0);
       cur_obj = (Object *)ptr.offset();
@@ -1165,22 +1176,22 @@ start_over:
       goto start_over;
     }
     if (visible) {
-			// debug
-			point_cnt++;
-			*cnt = point_cnt;
+      // debug
+      point_cnt++;
+      *cnt = point_cnt;
 
       return cur_obj->GetPinnedTuple();
     }
     ptr = tentative_next;
     prev_obj = cur_obj;
-		// debug
-		point_cnt++;
+    // debug
+    point_cnt++;
   }
-	// debug
-	point_cnt++;
-	*cnt = point_cnt;
-  
-	return nullptr;  // No Visible records
+  // debug
+  point_cnt++;
+  *cnt = point_cnt;
+
+  return nullptr;  // No Visible records
 }
 
 #endif /* HYU_DEBUG */
@@ -1188,93 +1199,19 @@ start_over:
 #ifdef HYU_EVAL_2 /* HYU_EVAL_2 */
 // For tuple arrays only, i.e., entries are guaranteed to point to Objects.
 dbtuple *sm_oid_mgr::oid_get_version_eval_stack(oid_array *oa, OID o,
-                                    TXN::xid_context *visitor_xc) {
-	fat_ptr *entry = oa->get(o);
-start_over:
-  fat_ptr ptr = volatile_read(*entry);
-  ASSERT(ptr.asi_type() == 0);
-  Object *prev_obj = nullptr;
-	uint64_t count = 0;
-	//uint64_t prev_level = 0;
-	//FILE* fp = fopen("chain_stack.data", "w+");
-  while (ptr.offset()) {
-    Object *cur_obj = nullptr;
-		//uint64_t cur_level = 0;
-
-    // Must read next_ before reading cur_obj->_clsn:
-    // the version we're currently reading (ie cur_obj) might be unlinked
-    // and thus recycled by the memory allocator at any time if it's not
-    // a committed version. If so, cur_obj->_next will be pointing to some
-    // other object in the allocator's free object pool - we'll probably
-    // end up at la-la land if we followed this _next pointer value...
-    // Here we employ some flavor of OCC to solve this problem:
-    // the aborting transaction that will unlink cur_obj will update
-    // cur_obj->_clsn to NULL_PTR, then deallocate(). Before reading
-    // cur_obj->_clsn, we (as the visitor), first dereference pp to get
-    // a stable value that "should" contain the right address of the next
-    // version. We then read cur_obj->_clsn to verify: if it's NULL_PTR
-    // that means we might have read a wrong _next value that's actually
-    // pointing to some irrelevant object in the allocator's memory pool,
-    // hence must start over from the beginning of the version chain.
-    fat_ptr tentative_next = NULL_PTR;
-    // If this is a backup server, then must see persistent_next to find out
-    // the **real** overwritten version.
-    if (config::is_backup_srv() && !config::command_log) {
-      oid_get_version_backup(ptr, tentative_next, prev_obj, cur_obj, visitor_xc);
-    } else {
-      ASSERT(ptr.asi_type() == 0);
-      cur_obj = (Object *)ptr.offset();
-			//cur_level = cur_obj->GetLevel();
-      tentative_next = cur_obj->GetNextVolatile();
-      ASSERT(tentative_next.asi_type() == 0);
-    }
-
-    bool retry = false;
-    bool visible = TestVisibility(cur_obj, visitor_xc, retry);
-    if (retry) {
-      goto start_over;
-    }
-    if (visible) {
-			//fclose(fp);
-			printf("count: %lu\n", count);
-      return cur_obj->GetPinnedTuple();
-    }
-		//if (prev_level == 1) {
-			//fprintf(fp, "%lu\n", cur_level);
-			//fflush(fp);
-		//}
-    ptr = tentative_next;
-    prev_obj = cur_obj;
-		count++;
-		//prev_level = cur_level;
-
-  }
-
-	//fclose(fp);
-	return nullptr;  // No Visible records
-}
-
-// For tuple arrays only, i.e., entries are guaranteed to point to Objects.
-dbtuple *sm_oid_mgr::oid_get_version_eval(oid_array *oa, OID o,
-                                    TXN::xid_context *visitor_xc) {
+                                                TXN::xid_context *visitor_xc) {
   fat_ptr *entry = oa->get(o);
 start_over:
   fat_ptr ptr = volatile_read(*entry);
   ASSERT(ptr.asi_type() == 0);
   Object *prev_obj = nullptr;
-	uint64_t next_gced_cnt = 0;
-	uint64_t next_vi_cnt = 0;
-	uint64_t next_null_cnt = 0;
-	uint64_t total_next_cnt = 0;
-	uint64_t highway_cnt = 0;
-	//int cur_level = 0;
-	//printf("start count!\n");
-	//FILE* fp_cnt = fopen("chain_count.data", "a+");
-	//fprintf(fp_cnt, "timestamp: %lu\n", visitor_xc->begin);
-	//fflush(fp_cnt);
+  uint64_t count = 0;
+  // uint64_t prev_level = 0;
+  // FILE* fp = fopen("chain_stack.data", "w+");
   while (ptr.offset()) {
     Object *cur_obj = nullptr;
-		Object *highway_obj = nullptr;
+    // uint64_t cur_level = 0;
+
     // Must read next_ before reading cur_obj->_clsn:
     // the version we're currently reading (ie cur_obj) might be unlinked
     // and thus recycled by the memory allocator at any time if it's not
@@ -1291,22 +1228,17 @@ start_over:
     // pointing to some irrelevant object in the allocator's memory pool,
     // hence must start over from the beginning of the version chain.
     fat_ptr tentative_next = NULL_PTR;
-		fat_ptr tentative_highway = NULL_PTR;
     // If this is a backup server, then must see persistent_next to find out
     // the **real** overwritten version.
     if (config::is_backup_srv() && !config::command_log) {
-			printf("[HYU] we only think about there is no replica\n");
-      oid_get_version_backup(ptr, tentative_next, prev_obj, cur_obj, visitor_xc);
+      oid_get_version_backup(ptr, tentative_next, prev_obj, cur_obj,
+                             visitor_xc);
     } else {
       ASSERT(ptr.asi_type() == 0);
       cur_obj = (Object *)ptr.offset();
+      // cur_level = cur_obj->GetLevel();
       tentative_next = cur_obj->GetNextVolatile();
-			tentative_highway = cur_obj->GetHighway();
       ASSERT(tentative_next.asi_type() == 0);
-			ASSERT(tentative_highway.asi_type() == 0);
-			//cur_level = cur_obj->GetLevel();
-			//fprintf(fp_cnt, "lev: %d\n", cur_level);
-			//fflush(fp_cnt);
     }
 
     bool retry = false;
@@ -1315,60 +1247,146 @@ start_over:
       goto start_over;
     }
     if (visible) {
-			//total_next_cnt = next_null_cnt + next_gced_cnt + next_vi_cnt;
-			//printf(fp_cnt, "next_null_cnt: %lu, next_gced_cnt: %lu, next_vi_cnt: %lu, total_next_cnt: %lu, highway_cnt: %lu\n", next_null_cnt, next_gced_cnt, next_vi_cnt, total_next_cnt, highway_cnt);
-			printf("%lu\n", total_next_cnt + highway_cnt);
-			//fprintf(fp_cnt, " %lu\n", total_next_cnt + highway_cnt);
-			//fflush(fp_cnt);
-			//fclose(fp_cnt);
+      // fclose(fp);
+      printf("count: %lu\n", count);
       return cur_obj->GetPinnedTuple();
-    } else {
-			highway_obj = (Object *)tentative_highway.offset();
-
-			if (highway_obj == NULL) {
-				ptr = tentative_next;
-				prev_obj = cur_obj;
-				next_null_cnt++;
-				continue;
-			}
-
-			fat_ptr hw_clsn = highway_obj->GetClsn();
-			// is GCed?
-			if (hw_clsn.asi_type() != fat_ptr::ASI_LOG ||
-					LSN::from_ptr(hw_clsn).offset() > LSN::from_ptr(cur_obj->GetClsn()).offset()) {
-				ptr = tentative_next;
-				prev_obj = cur_obj;
-				next_gced_cnt++;
-				continue;
-			}
-
-			bool highway_retry = false;
-			bool highway_visible = TestVisibility(highway_obj, visitor_xc, highway_retry);
-
-			if (highway_retry || highway_visible) {
-				ptr = tentative_next;
-				next_vi_cnt++;
-			} else {
-				highway_cnt++;
-				ptr = tentative_highway;
-			}
-			prev_obj = cur_obj;
-		}
+    }
+    // if (prev_level == 1) {
+    // fprintf(fp, "%lu\n", cur_level);
+    // fflush(fp);
+    //}
+    ptr = tentative_next;
+    prev_obj = cur_obj;
+    count++;
+    // prev_level = cur_level;
   }
 
-	//total_next_cnt = next_null_cnt + next_gced_cnt + next_vi_cnt;
-	//fprintf(fp_cnt, "next_null_cnt: %lu, next_gced_cnt: %lu, next_vi_cnt: %lu, total_next_cnt: %lu, highway_cnt: %lu at the end\n", next_null_cnt, next_gced_cnt, next_vi_cnt, total_next_cnt, highway_cnt);
-	printf("%lu at the end\n", total_next_cnt + highway_cnt);
-	//fprintf(fp_cnt, " %lu\n", total_next_cnt + highway_cnt);
-	//fflush(fp_cnt);
-	//fclose(fp_cnt);
+  // fclose(fp);
+  return nullptr;  // No Visible records
+}
+
+// For tuple arrays only, i.e., entries are guaranteed to point to Objects.
+dbtuple *sm_oid_mgr::oid_get_version_eval(oid_array *oa, OID o,
+                                          TXN::xid_context *visitor_xc) {
+  fat_ptr *entry = oa->get(o);
+start_over:
+  fat_ptr ptr = volatile_read(*entry);
+  ASSERT(ptr.asi_type() == 0);
+  Object *prev_obj = nullptr;
+  uint64_t next_gced_cnt = 0;
+  uint64_t next_vi_cnt = 0;
+  uint64_t next_null_cnt = 0;
+  uint64_t total_next_cnt = 0;
+  uint64_t highway_cnt = 0;
+  // int cur_level = 0;
+  // printf("start count!\n");
+  // FILE* fp_cnt = fopen("chain_count.data", "a+");
+  // fprintf(fp_cnt, "timestamp: %lu\n", visitor_xc->begin);
+  // fflush(fp_cnt);
+  while (ptr.offset()) {
+    Object *cur_obj = nullptr;
+    Object *highway_obj = nullptr;
+    // Must read next_ before reading cur_obj->_clsn:
+    // the version we're currently reading (ie cur_obj) might be unlinked
+    // and thus recycled by the memory allocator at any time if it's not
+    // a committed version. If so, cur_obj->_next will be pointing to some
+    // other object in the allocator's free object pool - we'll probably
+    // end up at la-la land if we followed this _next pointer value...
+    // Here we employ some flavor of OCC to solve this problem:
+    // the aborting transaction that will unlink cur_obj will update
+    // cur_obj->_clsn to NULL_PTR, then deallocate(). Before reading
+    // cur_obj->_clsn, we (as the visitor), first dereference pp to get
+    // a stable value that "should" contain the right address of the next
+    // version. We then read cur_obj->_clsn to verify: if it's NULL_PTR
+    // that means we might have read a wrong _next value that's actually
+    // pointing to some irrelevant object in the allocator's memory pool,
+    // hence must start over from the beginning of the version chain.
+    fat_ptr tentative_next = NULL_PTR;
+    fat_ptr tentative_highway = NULL_PTR;
+    // If this is a backup server, then must see persistent_next to find out
+    // the **real** overwritten version.
+    if (config::is_backup_srv() && !config::command_log) {
+      printf("[HYU] we only think about there is no replica\n");
+      oid_get_version_backup(ptr, tentative_next, prev_obj, cur_obj,
+                             visitor_xc);
+    } else {
+      ASSERT(ptr.asi_type() == 0);
+      cur_obj = (Object *)ptr.offset();
+      tentative_next = cur_obj->GetNextVolatile();
+      tentative_highway = cur_obj->GetHighway();
+      ASSERT(tentative_next.asi_type() == 0);
+      ASSERT(tentative_highway.asi_type() == 0);
+      // cur_level = cur_obj->GetLevel();
+      // fprintf(fp_cnt, "lev: %d\n", cur_level);
+      // fflush(fp_cnt);
+    }
+
+    bool retry = false;
+    bool visible = TestVisibility(cur_obj, visitor_xc, retry);
+    if (retry) {
+      goto start_over;
+    }
+    if (visible) {
+      // total_next_cnt = next_null_cnt + next_gced_cnt + next_vi_cnt;
+      // printf(fp_cnt, "next_null_cnt: %lu, next_gced_cnt: %lu, next_vi_cnt:
+      // %lu, total_next_cnt: %lu, highway_cnt: %lu\n", next_null_cnt,
+      // next_gced_cnt, next_vi_cnt, total_next_cnt, highway_cnt);
+      printf("%lu\n", total_next_cnt + highway_cnt);
+      // fprintf(fp_cnt, " %lu\n", total_next_cnt + highway_cnt);
+      // fflush(fp_cnt);
+      // fclose(fp_cnt);
+      return cur_obj->GetPinnedTuple();
+    } else {
+      highway_obj = (Object *)tentative_highway.offset();
+
+      if (highway_obj == NULL) {
+        ptr = tentative_next;
+        prev_obj = cur_obj;
+        next_null_cnt++;
+        continue;
+      }
+
+      fat_ptr hw_clsn = highway_obj->GetClsn();
+      // is GCed?
+      if (hw_clsn.asi_type() != fat_ptr::ASI_LOG ||
+          LSN::from_ptr(hw_clsn).offset() >
+              LSN::from_ptr(cur_obj->GetClsn()).offset()) {
+        ptr = tentative_next;
+        prev_obj = cur_obj;
+        next_gced_cnt++;
+        continue;
+      }
+
+      bool highway_retry = false;
+      bool highway_visible =
+          TestVisibility(highway_obj, visitor_xc, highway_retry);
+
+      if (highway_retry || highway_visible) {
+        ptr = tentative_next;
+        next_vi_cnt++;
+      } else {
+        highway_cnt++;
+        ptr = tentative_highway;
+      }
+      prev_obj = cur_obj;
+    }
+  }
+
+  // total_next_cnt = next_null_cnt + next_gced_cnt + next_vi_cnt;
+  // fprintf(fp_cnt, "next_null_cnt: %lu, next_gced_cnt: %lu, next_vi_cnt: %lu,
+  // total_next_cnt: %lu, highway_cnt: %lu at the end\n", next_null_cnt,
+  // next_gced_cnt, next_vi_cnt, total_next_cnt, highway_cnt);
+  printf("%lu at the end\n", total_next_cnt + highway_cnt);
+  // fprintf(fp_cnt, " %lu\n", total_next_cnt + highway_cnt);
+  // fflush(fp_cnt);
+  // fclose(fp_cnt);
   return nullptr;  // No Visible records
 }
 #endif /* HYU_EVAL_2 */
 
 // For tuple arrays only, i.e., entries are guaranteed to point to Objects.
 dbtuple *sm_oid_mgr::oid_get_version(oid_array *oa, OID o,
-                                    TXN::xid_context *visitor_xc) {
+                                     TXN::xid_context *visitor_xc) {
   fat_ptr *entry = oa->get(o);
 start_over:
   fat_ptr ptr = volatile_read(*entry);
@@ -1395,7 +1413,8 @@ start_over:
     // If this is a backup server, then must see persistent_next to find out
     // the **real** overwritten version.
     if (config::is_backup_srv() && !config::command_log) {
-      oid_get_version_backup(ptr, tentative_next, prev_obj, cur_obj, visitor_xc);
+      oid_get_version_backup(ptr, tentative_next, prev_obj, cur_obj,
+                             visitor_xc);
     } else {
       ASSERT(ptr.asi_type() == 0);
       cur_obj = (Object *)ptr.offset();
@@ -1414,25 +1433,25 @@ start_over:
     ptr = tentative_next;
     prev_obj = cur_obj;
   }
-  
-	return nullptr;  // No Visible records
+
+  return nullptr;  // No Visible records
 }
 
 #ifdef HYU_VWEAVER /* HYU_VWEAVER */
-#ifdef HYU_DEBUG /* HYU_DEBUG */
+#ifdef HYU_DEBUG   /* HYU_DEBUG */
 // For tuple arrays only, i.e., entries are guaranteed to point to Objects.
 dbtuple *sm_oid_mgr::oid_get_version_zigzag_debug(oid_array *oa, OID o,
-                                     							TXN::xid_context *visitor_xc,
-																									uint64_t *cnt) {
+                                                  TXN::xid_context *visitor_xc,
+                                                  uint64_t *cnt) {
   fat_ptr *entry = oa->get(o);
-	uint64_t zigzag_cnt = 0;
+  uint64_t zigzag_cnt = 0;
 start_over:
   fat_ptr ptr = volatile_read(*entry);
   ASSERT(ptr.asi_type() == 0);
   Object *prev_obj = nullptr;
   while (ptr.offset()) {
     Object *cur_obj = nullptr;
-		Object *highway_obj = nullptr;
+    Object *highway_obj = nullptr;
     // Must read next_ before reading cur_obj->_clsn:
     // the version we're currently reading (ie cur_obj) might be unlinked
     // and thus recycled by the memory allocator at any time if it's not
@@ -1449,19 +1468,20 @@ start_over:
     // pointing to some irrelevant object in the allocator's memory pool,
     // hence must start over from the beginning of the version chain.
     fat_ptr tentative_next = NULL_PTR;
-		fat_ptr tentative_highway = NULL_PTR;
+    fat_ptr tentative_highway = NULL_PTR;
     // If this is a backup server, then must see persistent_next to find out
     // the **real** overwritten version.
     if (config::is_backup_srv() && !config::command_log) {
-			printf("[HYU] we only think about there is no replica\n");
-      oid_get_version_backup(ptr, tentative_next, prev_obj, cur_obj, visitor_xc);
+      printf("[HYU] we only think about there is no replica\n");
+      oid_get_version_backup(ptr, tentative_next, prev_obj, cur_obj,
+                             visitor_xc);
     } else {
       ASSERT(ptr.asi_type() == 0);
       cur_obj = (Object *)ptr.offset();
       tentative_next = cur_obj->GetNextVolatile();
-			tentative_highway = cur_obj->GetHighway();
+      tentative_highway = cur_obj->GetHighway();
       ASSERT(tentative_next.asi_type() == 0);
-			ASSERT(tentative_highway.asi_type() == 0);
+      ASSERT(tentative_highway.asi_type() == 0);
     }
 
     bool retry = false;
@@ -1470,58 +1490,59 @@ start_over:
       goto start_over;
     }
     if (visible) {
-			// for check
-			if (prev_obj != nullptr) {
-				bool chk_retry = false;
-				bool chk_again = TestVisibility(prev_obj, visitor_xc, chk_retry);
-				if (chk_retry || chk_again) goto start_over;
-			}
+      // for check
+      if (prev_obj != nullptr) {
+        bool chk_retry = false;
+        bool chk_again = TestVisibility(prev_obj, visitor_xc, chk_retry);
+        if (chk_retry || chk_again) goto start_over;
+      }
 
-			// debug
-			zigzag_cnt++;
-			*cnt = zigzag_cnt;
+      // debug
+      zigzag_cnt++;
+      *cnt = zigzag_cnt;
 
-			return cur_obj->GetPinnedTuple();
+      return cur_obj->GetPinnedTuple();
     } else {
-			highway_obj = (Object *)tentative_highway.offset();
+      highway_obj = (Object *)tentative_highway.offset();
 
-			if (highway_obj == NULL) {
-				ptr = tentative_next;
-				prev_obj = cur_obj;
-				// debug
-				zigzag_cnt++;
-				continue;
-			}
+      if (highway_obj == NULL) {
+        ptr = tentative_next;
+        prev_obj = cur_obj;
+        // debug
+        zigzag_cnt++;
+        continue;
+      }
 
-			fat_ptr hw_clsn = highway_obj->GetClsn();
-			// is GCed?
-			if (hw_clsn.asi_type() != fat_ptr::ASI_LOG ||
-					LSN::from_ptr(hw_clsn).offset() > LSN::from_ptr(cur_obj->GetClsn()).offset()) {
-				ptr = tentative_next;
-				prev_obj = cur_obj;
-				continue;
-				//return nullptr;
-			}
+      fat_ptr hw_clsn = highway_obj->GetClsn();
+      // is GCed?
+      if (hw_clsn.asi_type() != fat_ptr::ASI_LOG ||
+          LSN::from_ptr(hw_clsn).offset() >
+              LSN::from_ptr(cur_obj->GetClsn()).offset()) {
+        ptr = tentative_next;
+        prev_obj = cur_obj;
+        continue;
+        // return nullptr;
+      }
 
-			bool highway_retry = false;
-			bool highway_visible = TestVisibility(highway_obj, visitor_xc, highway_retry);
-	
-			if (highway_retry)
-				goto start_over;
+      bool highway_retry = false;
+      bool highway_visible =
+          TestVisibility(highway_obj, visitor_xc, highway_retry);
 
-			if (highway_visible) {
-				ptr = tentative_next;
-			} else {
-				ptr = tentative_highway;
-			}
-			prev_obj = cur_obj;
-			// debug
-			zigzag_cnt++;
-		}
+      if (highway_retry) goto start_over;
+
+      if (highway_visible) {
+        ptr = tentative_next;
+      } else {
+        ptr = tentative_highway;
+      }
+      prev_obj = cur_obj;
+      // debug
+      zigzag_cnt++;
+    }
   }
-	// debug
-	zigzag_cnt++;
-	*cnt = zigzag_cnt;
+  // debug
+  zigzag_cnt++;
+  *cnt = zigzag_cnt;
 
   return nullptr;  // No Visible records
 }
@@ -1529,7 +1550,7 @@ start_over:
 
 // For tuple arrays only, i.e., entries are guaranteed to point to Objects.
 dbtuple *sm_oid_mgr::oid_get_version_zigzag(oid_array *oa, OID o,
-                                     				TXN::xid_context *visitor_xc) {
+                                            TXN::xid_context *visitor_xc) {
   fat_ptr *entry = oa->get(o);
 start_over:
   fat_ptr ptr = volatile_read(*entry);
@@ -1537,7 +1558,7 @@ start_over:
   Object *prev_obj = nullptr;
   while (ptr.offset()) {
     Object *cur_obj = nullptr;
-		Object *highway_obj = nullptr;
+    Object *highway_obj = nullptr;
     // Must read next_ before reading cur_obj->_clsn:
     // the version we're currently reading (ie cur_obj) might be unlinked
     // and thus recycled by the memory allocator at any time if it's not
@@ -1554,19 +1575,20 @@ start_over:
     // pointing to some irrelevant object in the allocator's memory pool,
     // hence must start over from the beginning of the version chain.
     fat_ptr tentative_next = NULL_PTR;
-		fat_ptr tentative_highway = NULL_PTR;
+    fat_ptr tentative_highway = NULL_PTR;
     // If this is a backup server, then must see persistent_next to find out
     // the **real** overwritten version.
     if (config::is_backup_srv() && !config::command_log) {
-			printf("[HYU] we only think about there is no replica\n");
-      oid_get_version_backup(ptr, tentative_next, prev_obj, cur_obj, visitor_xc);
+      printf("[HYU] we only think about there is no replica\n");
+      oid_get_version_backup(ptr, tentative_next, prev_obj, cur_obj,
+                             visitor_xc);
     } else {
       ASSERT(ptr.asi_type() == 0);
       cur_obj = (Object *)ptr.offset();
       tentative_next = cur_obj->GetNextVolatile();
-			tentative_highway = cur_obj->GetHighway();
+      tentative_highway = cur_obj->GetHighway();
       ASSERT(tentative_next.asi_type() == 0);
-			ASSERT(tentative_highway.asi_type() == 0);
+      ASSERT(tentative_highway.asi_type() == 0);
     }
 
     bool retry = false;
@@ -1577,34 +1599,36 @@ start_over:
     if (visible) {
       return cur_obj->GetPinnedTuple();
     } else {
-			highway_obj = (Object *)tentative_highway.offset();
+      highway_obj = (Object *)tentative_highway.offset();
 
-			if (highway_obj == NULL) {
-				ptr = tentative_next;
-				prev_obj = cur_obj;
-				continue;
-			}
+      if (highway_obj == NULL) {
+        ptr = tentative_next;
+        prev_obj = cur_obj;
+        continue;
+      }
 
-			fat_ptr hw_clsn = highway_obj->GetClsn();
-			// is GCed?
-			if (hw_clsn.asi_type() != fat_ptr::ASI_LOG ||
-					LSN::from_ptr(hw_clsn).offset() > LSN::from_ptr(cur_obj->GetClsn()).offset()) {
-				ptr = tentative_next;
-				prev_obj = cur_obj;
-				continue;
-				//return nullptr;
-			}
+      fat_ptr hw_clsn = highway_obj->GetClsn();
+      // is GCed?
+      if (hw_clsn.asi_type() != fat_ptr::ASI_LOG ||
+          LSN::from_ptr(hw_clsn).offset() >
+              LSN::from_ptr(cur_obj->GetClsn()).offset()) {
+        ptr = tentative_next;
+        prev_obj = cur_obj;
+        continue;
+        // return nullptr;
+      }
 
-			bool highway_retry = false;
-			bool highway_visible = TestVisibility(highway_obj, visitor_xc, highway_retry);
+      bool highway_retry = false;
+      bool highway_visible =
+          TestVisibility(highway_obj, visitor_xc, highway_retry);
 
-			if (highway_retry || highway_visible) {
-				ptr = tentative_next;
-			} else {
-				ptr = tentative_highway;
-			}
-			prev_obj = cur_obj;
-		}
+      if (highway_retry || highway_visible) {
+        ptr = tentative_next;
+      } else {
+        ptr = tentative_highway;
+      }
+      prev_obj = cur_obj;
+    }
   }
 
   return nullptr;  // No Visible records
@@ -1612,7 +1636,7 @@ start_over:
 
 // For tuple arrays only, i.e., entries are guaranteed to point to Objects.
 fat_ptr sm_oid_mgr::oid_get_version_zigzag_ptr(oid_array *oa, OID o,
-                                     				TXN::xid_context *visitor_xc) {
+                                               TXN::xid_context *visitor_xc) {
   fat_ptr *entry = oa->get(o);
 start_over:
   fat_ptr ptr = volatile_read(*entry);
@@ -1620,7 +1644,7 @@ start_over:
   Object *prev_obj = nullptr;
   while (ptr.offset()) {
     Object *cur_obj = nullptr;
-		Object *highway_obj = nullptr;
+    Object *highway_obj = nullptr;
     // Must read next_ before reading cur_obj->_clsn:
     // the version we're currently reading (ie cur_obj) might be unlinked
     // and thus recycled by the memory allocator at any time if it's not
@@ -1637,19 +1661,20 @@ start_over:
     // pointing to some irrelevant object in the allocator's memory pool,
     // hence must start over from the beginning of the version chain.
     fat_ptr tentative_next = NULL_PTR;
-		fat_ptr tentative_highway = NULL_PTR;
+    fat_ptr tentative_highway = NULL_PTR;
     // If this is a backup server, then must see persistent_next to find out
     // the **real** overwritten version.
     if (config::is_backup_srv() && !config::command_log) {
-			printf("[HYU] we only think about there is no replica\n");
-      oid_get_version_backup(ptr, tentative_next, prev_obj, cur_obj, visitor_xc);
+      printf("[HYU] we only think about there is no replica\n");
+      oid_get_version_backup(ptr, tentative_next, prev_obj, cur_obj,
+                             visitor_xc);
     } else {
       ASSERT(ptr.asi_type() == 0);
       cur_obj = (Object *)ptr.offset();
       tentative_next = cur_obj->GetNextVolatile();
-			tentative_highway = cur_obj->GetHighway();
+      tentative_highway = cur_obj->GetHighway();
       ASSERT(tentative_next.asi_type() == 0);
-			ASSERT(tentative_highway.asi_type() == 0);
+      ASSERT(tentative_highway.asi_type() == 0);
     }
 
     bool retry = false;
@@ -1660,49 +1685,51 @@ start_over:
     if (visible) {
       return ptr;
     } else {
-			highway_obj = (Object *)tentative_highway.offset();
+      highway_obj = (Object *)tentative_highway.offset();
 
-			if (highway_obj == NULL) {
-				ptr = tentative_next;
-				prev_obj = cur_obj;
-				continue;
-			}
+      if (highway_obj == NULL) {
+        ptr = tentative_next;
+        prev_obj = cur_obj;
+        continue;
+      }
 
-			fat_ptr hw_clsn = highway_obj->GetClsn();
-			// is GCed?
-			if (hw_clsn.asi_type() != fat_ptr::ASI_LOG ||
-					LSN::from_ptr(hw_clsn).offset() > LSN::from_ptr(cur_obj->GetClsn()).offset()) {
-				ptr = tentative_next;
-				prev_obj = cur_obj;
-				continue;
-				//return NULL_PTR;
-			}
+      fat_ptr hw_clsn = highway_obj->GetClsn();
+      // is GCed?
+      if (hw_clsn.asi_type() != fat_ptr::ASI_LOG ||
+          LSN::from_ptr(hw_clsn).offset() >
+              LSN::from_ptr(cur_obj->GetClsn()).offset()) {
+        ptr = tentative_next;
+        prev_obj = cur_obj;
+        continue;
+        // return NULL_PTR;
+      }
 
-			bool highway_retry = false;
-			bool highway_visible = TestVisibility(highway_obj, visitor_xc, highway_retry);
+      bool highway_retry = false;
+      bool highway_visible =
+          TestVisibility(highway_obj, visitor_xc, highway_retry);
 
-			if (highway_retry || highway_visible) {
-				ptr = tentative_next;
-			} else {
-				ptr = tentative_highway;
-			}
-			prev_obj = cur_obj;
-		}
+      if (highway_retry || highway_visible) {
+        ptr = tentative_next;
+      } else {
+        ptr = tentative_highway;
+      }
+      prev_obj = cur_obj;
+    }
   }
 
   return NULL_PTR;  // No Visible records
 }
 
 // For tuple arrays only, i.e., entries are guaranteed to point to Objects.
-dbtuple *sm_oid_mgr::oid_get_version_zigzag_from_ver(fat_ptr ver,
-                                     						TXN::xid_context *visitor_xc) {
+dbtuple *sm_oid_mgr::oid_get_version_zigzag_from_ver(
+    fat_ptr ver, TXN::xid_context *visitor_xc) {
 start_over:
   fat_ptr ptr = ver;
   ASSERT(ptr.asi_type() == 0);
   Object *prev_obj = nullptr;
   while (ptr.offset()) {
     Object *cur_obj = nullptr;
-		Object *highway_obj = nullptr;
+    Object *highway_obj = nullptr;
     // Must read next_ before reading cur_obj->_clsn:
     // the version we're currently reading (ie cur_obj) might be unlinked
     // and thus recycled by the memory allocator at any time if it's not
@@ -1719,19 +1746,20 @@ start_over:
     // pointing to some irrelevant object in the allocator's memory pool,
     // hence must start over from the beginning of the version chain.
     fat_ptr tentative_next = NULL_PTR;
-		fat_ptr tentative_highway = NULL_PTR;
+    fat_ptr tentative_highway = NULL_PTR;
     // If this is a backup server, then must see persistent_next to find out
     // the **real** overwritten version.
     if (config::is_backup_srv() && !config::command_log) {
-			printf("[HYU] we only think about there is no replica\n");
-      oid_get_version_backup(ptr, tentative_next, prev_obj, cur_obj, visitor_xc);
+      printf("[HYU] we only think about there is no replica\n");
+      oid_get_version_backup(ptr, tentative_next, prev_obj, cur_obj,
+                             visitor_xc);
     } else {
       ASSERT(ptr.asi_type() == 0);
       cur_obj = (Object *)ptr.offset();
       tentative_next = cur_obj->GetNextVolatile();
-			tentative_highway = cur_obj->GetHighway();
+      tentative_highway = cur_obj->GetHighway();
       ASSERT(tentative_next.asi_type() == 0);
-			ASSERT(tentative_highway.asi_type() == 0);
+      ASSERT(tentative_highway.asi_type() == 0);
     }
 
     bool retry = false;
@@ -1742,47 +1770,50 @@ start_over:
     if (visible) {
       return cur_obj->GetPinnedTuple();
     } else {
-			highway_obj = (Object *)tentative_highway.offset();
+      highway_obj = (Object *)tentative_highway.offset();
 
-			if (highway_obj == NULL) {
-				ptr = tentative_next;
-				prev_obj = cur_obj;
-				continue;
-			}
+      if (highway_obj == NULL) {
+        ptr = tentative_next;
+        prev_obj = cur_obj;
+        continue;
+      }
 
-			fat_ptr hw_clsn = highway_obj->GetClsn();
-			// is GCed?
-			if (hw_clsn.asi_type() != fat_ptr::ASI_LOG ||
-					LSN::from_ptr(hw_clsn).offset() > LSN::from_ptr(cur_obj->GetClsn()).offset()) {
-				ptr = tentative_next;
-				prev_obj = cur_obj;
-				continue;
-				//return nullptr;
-			}
+      fat_ptr hw_clsn = highway_obj->GetClsn();
+      // is GCed?
+      if (hw_clsn.asi_type() != fat_ptr::ASI_LOG ||
+          LSN::from_ptr(hw_clsn).offset() >
+              LSN::from_ptr(cur_obj->GetClsn()).offset()) {
+        ptr = tentative_next;
+        prev_obj = cur_obj;
+        continue;
+        // return nullptr;
+      }
 
-			bool highway_retry = false;
-			bool highway_visible = TestVisibility(highway_obj, visitor_xc, highway_retry);
+      bool highway_retry = false;
+      bool highway_visible =
+          TestVisibility(highway_obj, visitor_xc, highway_retry);
 
-			if (highway_retry || highway_visible) {
-				ptr = tentative_next;
-			} else {
-				ptr = tentative_highway;
-			}
-			prev_obj = cur_obj;
-		}
+      if (highway_retry || highway_visible) {
+        ptr = tentative_next;
+      } else {
+        ptr = tentative_highway;
+      }
+      prev_obj = cur_obj;
+    }
   }
 
   return nullptr;  // No Visible records
 }
 
-
 #endif /* HYU_VWEAVER */
 
-bool sm_oid_mgr::TestVisibility(Object *object, TXN::xid_context *xc, bool &retry) {
+bool sm_oid_mgr::TestVisibility(Object *object, TXN::xid_context *xc,
+                                bool &retry) {
   fat_ptr clsn = object->GetClsn();
   uint16_t asi_type = clsn.asi_type();
   if (clsn == NULL_PTR) {
-    ASSERT(!config::is_backup_srv() || (config::command_log && config::replay_threads));
+    ASSERT(!config::is_backup_srv() ||
+           (config::command_log && config::replay_threads));
     // dead tuple that was (or about to be) unlinked, start over
     retry = true;
     return false;
@@ -1791,7 +1822,8 @@ bool sm_oid_mgr::TestVisibility(Object *object, TXN::xid_context *xc, bool &retr
   ALWAYS_ASSERT(asi_type == fat_ptr::ASI_XID || asi_type == fat_ptr::ASI_LOG);
   if (asi_type == fat_ptr::ASI_XID) {  // in-flight
     // Backups don't write unless for command logging
-    ASSERT(!config::is_backup_srv() || (config::command_log && config::replay_threads));
+    ASSERT(!config::is_backup_srv() ||
+           (config::command_log && config::replay_threads));
 
     XID holder_xid = XID::from_ptr(clsn);
     // Dirty data made by me is visible!
@@ -1800,7 +1832,8 @@ bool sm_oid_mgr::TestVisibility(Object *object, TXN::xid_context *xc, bool &retr
              ((Object *)object->GetNextVolatile().offset())
                      ->GetClsn()
                      .asi_type() == fat_ptr::ASI_LOG);
-      ASSERT(!config::is_backup_srv() || (config::command_log && config::replay_threads));
+      ASSERT(!config::is_backup_srv() ||
+             (config::command_log && config::replay_threads));
       return true;
     }
     auto *holder = TXN::xid_get_context(holder_xid);
@@ -1815,49 +1848,53 @@ bool sm_oid_mgr::TestVisibility(Object *object, TXN::xid_context *xc, bool &retr
 
     // context still valid for this XID?
     if (owner != holder_xid) {
-      ASSERT(!config::is_backup_srv() || (config::command_log && config::replay_threads));
+      ASSERT(!config::is_backup_srv() ||
+             (config::command_log && config::replay_threads));
       retry = true;
       return false;
     }
 
-		// [HYU] There is a correctness violation case in checking visibility with
-		// holder's transaction commit sequence(TXN_COMMITTING)
-		// if (state == TNX::TXN_CMMTD)
-		// 												get clsn			end commit
-		//											(COMMITTING)		(CMMTD)
-		// 					T1----W(A)------->|----------->|
-		//															 T2--R(A)------>
-		// When a transaction(T1) starts to commit, and it also gets clsn,
-		// but doesn't start updating clsn in version Object yet.
-		// After that, a new transaction(T2) starts and tries to read a record
-		// version that T1 updates. Because T2 gets begin timestamp after T1 gets
-		// clsn (holder->end < xc->begin), so T2 has to be able to read T1's updated
-		// version. But in TestVisibility, there is no way to say 'visible' in this
-		// case. So we add state TXN_ALMOST_COMMIT that guarantees there is no more
-		// transaction abortion in commit sequence(TXN_ALMOST_COMMIT ~ TXN_CMMTD)
-		// If the version holder's state is TXN_COMMITTING with clsn,
-		// wait a slight time using spin for the time that we can guarantee
-		// it is safe to check this version's visibility
-		// (TXN_ALMOST_COMMIT or TXN_CMMTD)
-    if (state == TXN::TXN_CMMTD || (state == TXN::TXN_COMMITTING && holder->end > 0) ||
-				state == TXN::TXN_ALMOST_COMMIT) {
-			ASSERT(volatile_read(holder->end));
+    // [HYU] There is a correctness violation case in checking visibility with
+    // holder's transaction commit sequence(TXN_COMMITTING)
+    // if (state == TNX::TXN_CMMTD)
+    // 												get clsn			end
+    // commit
+    //											(COMMITTING)
+    //(CMMTD)
+    // 					T1----W(A)------->|----------->|
+    //															 T2--R(A)------>
+    // When a transaction(T1) starts to commit, and it also gets clsn,
+    // but doesn't start updating clsn in version Object yet.
+    // After that, a new transaction(T2) starts and tries to read a record
+    // version that T1 updates. Because T2 gets begin timestamp after T1 gets
+    // clsn (holder->end < xc->begin), so T2 has to be able to read T1's updated
+    // version. But in TestVisibility, there is no way to say 'visible' in this
+    // case. So we add state TXN_ALMOST_COMMIT that guarantees there is no more
+    // transaction abortion in commit sequence(TXN_ALMOST_COMMIT ~ TXN_CMMTD)
+    // If the version holder's state is TXN_COMMITTING with clsn,
+    // wait a slight time using spin for the time that we can guarantee
+    // it is safe to check this version's visibility
+    // (TXN_ALMOST_COMMIT or TXN_CMMTD)
+    if (state == TXN::TXN_CMMTD ||
+        (state == TXN::TXN_COMMITTING && holder->end > 0) ||
+        state == TXN::TXN_ALMOST_COMMIT) {
+      ASSERT(volatile_read(holder->end));
       ASSERT(owner == holder_xid);
-			
-			if (state == TXN::TXN_COMMITTING) {
-				// slight spin for abortion
-				state = volatile_read(holder->state);
-				while (state == TXN::TXN_COMMITTING) {
-					state = volatile_read(holder->state);
-					if (state != TXN::TXN_COMMITTING) break;
-				}
-				if (state == TXN::TXN_ABRTD) {
-					retry = true;
-					return false;
-				}
-				ASSERT(state == TXN::TXN_ALMOST_COMMIT || state == TXN::TXN_CMMTD);
-			}
-			// [HYU] end
+
+      if (state == TXN::TXN_COMMITTING) {
+        // slight spin for abortion
+        state = volatile_read(holder->state);
+        while (state == TXN::TXN_COMMITTING) {
+          state = volatile_read(holder->state);
+          if (state != TXN::TXN_COMMITTING) break;
+        }
+        if (state == TXN::TXN_ABRTD) {
+          retry = true;
+          return false;
+        }
+        ASSERT(state == TXN::TXN_ALMOST_COMMIT || state == TXN::TXN_CMMTD);
+      }
+      // [HYU] end
 #if defined(RC) || defined(RC_SPIN)
 #ifdef SSN
       if (config::enable_safesnap &&

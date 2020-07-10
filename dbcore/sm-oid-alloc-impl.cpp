@@ -1,5 +1,5 @@
-#include <vector>
 #include <algorithm>
+#include <vector>
 
 #include "sm-oid-alloc-impl.h"
 
@@ -439,8 +439,9 @@ int32_t sm_allocator::_scavenge_l3(uint32_t n, Filter const &f, Sink const &s) {
 int32_t sm_allocator::_scavenge_l3(uint32_t n) {
   if (not l3_valid()) return 0;
 
-  auto l1_has_space =
-      [&]() { return head.l1_size + thread_cache::N <= L1_CAPACITY; };
+  auto l1_has_space = [&]() {
+    return head.l1_size + thread_cache::N <= L1_CAPACITY;
+  };
 
   /* Actually, we couldn't care less what OID it is... but we need
      to stop if we reach our target, or if we can't guarantee room

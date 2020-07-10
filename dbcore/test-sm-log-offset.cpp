@@ -1,14 +1,14 @@
-#include "sm-log-offset.h"
 #include "sm-log-defs.h"
+#include "sm-log-offset.h"
 
-#include "w_rand.h"
 #include "stopwatch.h"
+#include "w_rand.h"
 
-#include <vector>
-#include <algorithm>
-#include <utility>
-#include <map>
 #include <unistd.h>
+#include <algorithm>
+#include <map>
+#include <utility>
+#include <vector>
 
 using namespace RCU;
 
@@ -73,8 +73,9 @@ void doit(size_t nmax, size_t segment_size, bool verbose) {
       } else {
         auto it = segments.find(rval.sid->start_offset);
         if (it == segments.end())
-          it = segments.insert(std::make_pair(rval.sid->start_offset,
-                                              *rval.sid)).first;
+          it =
+              segments.insert(std::make_pair(rval.sid->start_offset, *rval.sid))
+                  .first;
         else
           ASSERT(rval.sid->segnum == it->second.segnum and
                  rval.sid->end_offset == it->second.end_offset);

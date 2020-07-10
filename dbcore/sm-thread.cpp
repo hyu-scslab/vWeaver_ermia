@@ -1,8 +1,8 @@
+#include "sm-thread.h"
 #include "rcu.h"
 #include "serial.h"
 #include "sm-alloc.h"
 #include "sm-log.h"
-#include "sm-thread.h"
 
 namespace ermia {
 namespace thread {
@@ -29,7 +29,8 @@ bool DetectCPUCores() {
     uint32_t cpu = 0;
     while (cpu < std::thread::hardware_concurrency()) {
       std::string dir_name = "/sys/devices/system/node/node" +
-                              std::to_string(node) + "/cpu" + std::to_string(cpu);
+                             std::to_string(node) + "/cpu" +
+                             std::to_string(cpu);
       struct stat info;
       if (stat(dir_name.c_str(), &info) != 0) {
         // Doesn't exist, continue to next to get all cores in the same node
@@ -60,11 +61,14 @@ bool DetectCPUCores() {
       if (cpu == threads[0]) {
         cpu_cores.emplace_back(node, threads[0]);
         for (uint32_t i = 1; i < threads.size(); ++i) {
-          cpu_cores[cpu_cores.size()-1].AddLogical(threads[i]);
+          cpu_cores[cpu_cores.size() - 1].AddLogical(threads[i]);
         }
-        LOG(INFO) << "Physical core: " << cpu_cores[cpu_cores.size()-1].physical_thread;
-        for (uint32_t i = 0; i < cpu_cores[cpu_cores.size()-1].logical_threads.size(); ++i) {
-          LOG(INFO) << "Logical core: " << cpu_cores[cpu_cores.size()-1].logical_threads[i];
+        LOG(INFO) << "Physical core: "
+                  << cpu_cores[cpu_cores.size() - 1].physical_thread;
+        for (uint32_t i = 0;
+             i < cpu_cores[cpu_cores.size() - 1].logical_threads.size(); ++i) {
+          LOG(INFO) << "Logical core: "
+                    << cpu_cores[cpu_cores.size() - 1].logical_threads[i];
         }
       }
       ++cpu;
@@ -82,27 +86,28 @@ Thread::Thread(uint16_t n, uint16_t c, uint32_t sys_cpu, bool is_physical)
       task(nullptr),
       sleep_when_idle(true),
       is_physical(is_physical) {
-  int rc = pthread_attr_init (&thd_attr);
+  int rc = pthread_attr_init(&thd_attr);
   pthread_create(&thd, &thd_attr, &Thread::StaticIdleTask, (void *)this);
   cpu_set_t cpuset;
   CPU_ZERO(&cpuset);
   CPU_SET(sys_cpu, &cpuset);
   rc = pthread_setaffinity_np(thd, sizeof(cpu_set_t), &cpuset);
-  LOG(INFO) << "Binding thread " << core << " on node " << node << " to CPU " << sys_cpu;
+  LOG(INFO) << "Binding thread " << core << " on node " << node << " to CPU "
+            << sys_cpu;
   ALWAYS_ASSERT(rc == 0);
 }
 
 PerNodeThreadPool::PerNodeThreadPool(uint16_t n) : node(n), bitmap(0UL) {
   ALWAYS_ASSERT(!numa_run_on_node(node));
-  threads = (Thread *)numa_alloc_onnode(
-      sizeof(Thread) * max_threads_per_node, node);
+  threads =
+      (Thread *)numa_alloc_onnode(sizeof(Thread) * max_threads_per_node, node);
 
   if (cpu_cores.size()) {
     uint32_t total_numa_nodes = numa_max_node() + 1;
     ALWAYS_ASSERT(cpu_cores.size() / total_numa_nodes <= max_threads_per_node);
     LOG(INFO) << "Node " << n << " has " << cpu_cores.size() / total_numa_nodes
-              << " physical cores, " << max_threads_per_node
-              << " threads"; uint32_t core = 0;
+              << " physical cores, " << max_threads_per_node << " threads";
+    uint32_t core = 0;
     for (uint32_t i = 0; i < cpu_cores.size(); ++i) {
       auto &c = cpu_cores[i];
       if (c.node == n) {
@@ -120,11 +125,11 @@ PerNodeThreadPool::PerNodeThreadPool(uint16_t n) : node(n), bitmap(0UL) {
 
 void Initialize() {
   uint32_t nodes = numa_max_node() + 1;
-  PerNodeThreadPool::max_threads_per_node = std::thread::hardware_concurrency() / nodes;
+  PerNodeThreadPool::max_threads_per_node =
+      std::thread::hardware_concurrency() / nodes;
   bool detected = thread::DetectCPUCores();
   LOG_IF(FATAL, !detected);
-  thread_pools =
-      (PerNodeThreadPool *)malloc(sizeof(PerNodeThreadPool) * nodes);
+  thread_pools = (PerNodeThreadPool *)malloc(sizeof(PerNodeThreadPool) * nodes);
   for (uint16_t i = 0; i < nodes; i++) {
     new (thread_pools + i) PerNodeThreadPool(i);
   }
@@ -210,7 +215,7 @@ retry:
   return t;
 }
 
-bool PerNodeThreadPool::GetThreadGroup(std::vector<Thread*> &thread_group) {
+bool PerNodeThreadPool::GetThreadGroup(std::vector<Thread *> &thread_group) {
 retry:
   thread_group.clear();
   uint64_t b = volatile_read(bitmap);

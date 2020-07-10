@@ -5,19 +5,18 @@
 #include <atomic>
 #include <future>
 
+#include "../txn.h"
 #include "sm-alloc.h"
 #include "sm-chkpt.h"
 #include "sm-common.h"
 #include "sm-object.h"
-#include "../txn.h"
 
 namespace ermia {
 namespace MM {
 
-//for HYU
+// for HYU
 uint64_t max_vclen = 0;
-//uint64_t last_clsn = 0;
-
+// uint64_t last_clsn = 0;
 
 // tzwang (2015-11-01):
 // gc_lsn is the LSN of the no-longer-needed versions, which is the end LSN
@@ -59,7 +58,7 @@ thread_local TlsFreeObjectPool *tls_free_object_pool CACHE_ALIGNED;
 char **node_memory = nullptr;
 uint64_t *allocated_node_memory = nullptr;
 static uint64_t thread_local tls_allocated_node_memory CACHE_ALIGNED;
-static const uint64_t tls_node_memory_mb = 200; //default is 200
+static const uint64_t tls_node_memory_mb = 200;  // default is 200
 
 void prepare_node_memory() {
   ALWAYS_ASSERT(config::numa_nodes);
@@ -94,7 +93,7 @@ void prepare_node_memory() {
 void gc_version_chain(fat_ptr *oid_entry) {
   fat_ptr ptr = *oid_entry;
   Object *cur_obj = (Object *)ptr.offset();
-	dbtuple *candidate = nullptr;
+  dbtuple *candidate = nullptr;
 
   if (!cur_obj) {
     // Tuple is deleted, skip
@@ -120,21 +119,21 @@ void gc_version_chain(fat_ptr *oid_entry) {
   // that can be safely recycled (the version after cur_obj).
   ptr = cur_obj->GetNextVolatile();
   prev_next = cur_obj->GetNextVolatilePtr();
-  
-	uint64_t glsn = volatile_read(gc_lsn);
-	if (ptr.offset()) {
-		TXN::xid_context gc_xc;
-		gc_xc.begin = glsn;
-		candidate = oidmgr->oid_get_version_zigzag_from_ver(ptr, &gc_xc);
-	}
 
-	if (candidate) {
-		cur_obj = (Object*)candidate->GetObject();
-  	ptr = cur_obj->GetNextVolatile();
-  	prev_next = cur_obj->GetNextVolatilePtr();
+  uint64_t glsn = volatile_read(gc_lsn);
+  if (ptr.offset()) {
+    TXN::xid_context gc_xc;
+    gc_xc.begin = glsn;
+    candidate = oidmgr->oid_get_version_zigzag_from_ver(ptr, &gc_xc);
+  }
 
-		if (ptr._ptr) {
-			volatile_write(prev_next->_ptr, 0);
+  if (candidate) {
+    cur_obj = (Object *)candidate->GetObject();
+    ptr = cur_obj->GetNextVolatile();
+    prev_next = cur_obj->GetNextVolatilePtr();
+
+    if (ptr._ptr) {
+      volatile_write(prev_next->_ptr, 0);
       while (ptr.offset()) {
         cur_obj = (Object *)ptr.offset();
         clsn = cur_obj->GetClsn();
@@ -143,27 +142,26 @@ void gc_version_chain(fat_ptr *oid_entry) {
         fat_ptr next_ptr = cur_obj->GetNextVolatile();
         cur_obj->SetClsn(NULL_PTR);
         cur_obj->SetNextVolatile(NULL_PTR);
-				cur_obj->SetHighway(NULL_PTR);
-				cur_obj->SetHighwayClsn(NULL_PTR);
-				cur_obj->SetLeftShortcut(NULL_PTR);
-				cur_obj->SetLevel(1);
-				cur_obj->SetHighwayLevel(0);
-				cur_obj->rec_id = 0;
+        cur_obj->SetHighway(NULL_PTR);
+        cur_obj->SetHighwayClsn(NULL_PTR);
+        cur_obj->SetLeftShortcut(NULL_PTR);
+        cur_obj->SetLevel(1);
+        cur_obj->SetHighwayLevel(0);
+        cur_obj->rec_id = 0;
         if (!tls_free_object_pool) {
           tls_free_object_pool = new TlsFreeObjectPool;
         }
         tls_free_object_pool->Put(ptr);
         ptr = next_ptr;
       }
-
-		}
-	}
+    }
+  }
 }
-#else /* HYU_VWEAVER */
+#else  /* HYU_VWEAVER */
 void gc_version_chain(fat_ptr *oid_entry) {
   fat_ptr ptr = *oid_entry;
   Object *cur_obj = (Object *)ptr.offset();
-	uint64_t vc_length = 0;
+  uint64_t vc_length = 0;
   if (!cur_obj) {
     // Tuple is deleted, skip
     return;
@@ -210,10 +208,10 @@ void gc_version_chain(fat_ptr *oid_entry) {
     // chkpt-start lsn is necessary for correctness.
     uint64_t glsn = volatile_read(gc_lsn);
 
-		// [HYU] GC optimization
-		//if (cur_obj->HYU_gc_candidate_clsn_ == glsn) {
-		//	break;
-		//}
+    // [HYU] GC optimization
+    // if (cur_obj->HYU_gc_candidate_clsn_ == glsn) {
+    //	break;
+    //}
 
     if (LSN::from_ptr(clsn).offset() <= glsn && ptr._ptr) {
       // Fast forward to the **second** version < gc_lsn. Consider that we set
@@ -295,7 +293,7 @@ void *allocate_onnode(size_t size) {
   auto node = numa_node_of_cpu(sched_getcpu());
   ALWAYS_ASSERT(node < config::numa_nodes);
   auto offset = __sync_fetch_and_add(&allocated_node_memory[node], size);
-	//printf("[HYU] memory usage: %lu\n", allocated_node_memory[node]);
+  // printf("[HYU] memory usage: %lu\n", allocated_node_memory[node]);
   if (likely(offset + size <= config::node_memory_gb * config::GB)) {
     return node_memory[node] + offset;
   }
@@ -310,12 +308,12 @@ void deallocate(fat_ptr p) {
   obj->SetNextVolatile(NULL_PTR);
   obj->SetClsn(NULL_PTR);
 #ifdef HYU_VWEAVER /* HYU_VWEAVER */
-	obj->SetHighway(NULL_PTR);
-	obj->SetHighwayClsn(NULL_PTR);
-	obj->SetLeftShortcut(NULL_PTR);
-	obj->SetLevel(1);
-	obj->SetHighwayLevel(0);
-	obj->rec_id = 0;
+  obj->SetHighway(NULL_PTR);
+  obj->SetHighwayClsn(NULL_PTR);
+  obj->SetLeftShortcut(NULL_PTR);
+  obj->SetLevel(1);
+  obj->SetHighwayLevel(0);
+  obj->rec_id = 0;
 #endif /* HYU_VWEAVER */
   if (!tls_free_object_pool) {
     tls_free_object_pool = new TlsFreeObjectPool;

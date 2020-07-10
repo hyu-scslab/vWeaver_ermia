@@ -1,11 +1,11 @@
-#include "sm-config.h"
 #include "sm-log-file.h"
+#include "sm-config.h"
 
 #include "rcu.h"
 
-#include <new>
 #include <sys/fcntl.h>
 #include <algorithm>
+#include <new>
 
 namespace ermia {
 
@@ -253,110 +253,109 @@ sm_log_file_mgr::sm_log_file_mgr() {
   dfd = dir.dup();
   for (char const *fname : dir) {
     switch (fname[0]) {
-      case '.': {
-        // skip files matching .*
+    case '.': {
+      // skip files matching .*
+      continue;
+    }
+    case 'c': {
+      // allowed: one checkpoint marker
+      char canary;
+      int n = sscanf(fname, CHKPT_FILE_NAME_FMT "%c", &_chkpt_start_lsn._val,
+                     &_chkpt_end_lsn._val, &canary);
+      if (n == 2) {
+        // valid checkpoint marker file name
+        THROW_IF(chkpt_found, log_file_error,
+                 "Multiple log checkpoint markers found");
+        THROW_IF(not(_chkpt_start_lsn < _chkpt_end_lsn), log_file_error,
+                 "Corrupt checkpoint marker: %s", fname);
+        THROW_IF(not is_aligned(_chkpt_start_lsn.offset()), log_file_error,
+                 "Misaligned checkpoint start: %zx",
+                 size_t(_chkpt_start_lsn.offset()));
+        THROW_IF(not is_aligned(_chkpt_end_lsn.offset()), log_file_error,
+                 "Misaligned checkpoint end: %zx",
+                 size_t(_chkpt_end_lsn.offset()));
+        chkpt_found = true;
         continue;
       }
-      case 'c': {
-        // allowed: one checkpoint marker
-        char canary;
-        int n = sscanf(fname, CHKPT_FILE_NAME_FMT "%c", &_chkpt_start_lsn._val,
-                       &_chkpt_end_lsn._val, &canary);
-        if (n == 2) {
-          // valid checkpoint marker file name
-          THROW_IF(chkpt_found, log_file_error,
-                   "Multiple log checkpoint markers found");
-          THROW_IF(not(_chkpt_start_lsn < _chkpt_end_lsn), log_file_error,
-                   "Corrupt checkpoint marker: %s", fname);
-          THROW_IF(not is_aligned(_chkpt_start_lsn.offset()), log_file_error,
-                   "Misaligned checkpoint start: %zx",
-                   size_t(_chkpt_start_lsn.offset()));
-          THROW_IF(not is_aligned(_chkpt_end_lsn.offset()), log_file_error,
-                   "Misaligned checkpoint end: %zx",
-                   size_t(_chkpt_end_lsn.offset()));
-          chkpt_found = true;
-          continue;
-        }
-        break;
+      break;
+    }
+    case 'd': {
+      // allowed: one durability marker
+      char canary;
+      int n = sscanf(fname, DURABLE_FILE_NAME_FMT "%c", &_durable_lsn._val,
+                     &canary);
+      if (n == 1) {
+        // valid durability marker
+        THROW_IF(durable_found, log_file_error,
+                 "Multiple durable markers found");
+        THROW_IF(not is_aligned(_durable_lsn.offset()), log_file_error,
+                 "Misaligned durable marker: %zx",
+                 size_t(_durable_lsn.offset()));
+        durable_found = true;
+        continue;
       }
-      case 'd': {
-        // allowed: one durability marker
-        char canary;
-        int n = sscanf(fname, DURABLE_FILE_NAME_FMT "%c", &_durable_lsn._val,
-                       &canary);
-        if (n == 1) {
-          // valid durability marker
-          THROW_IF(durable_found, log_file_error,
-                   "Multiple durable markers found");
-          THROW_IF(not is_aligned(_durable_lsn.offset()), log_file_error,
-                   "Misaligned durable marker: %zx",
-                   size_t(_durable_lsn.offset()));
-          durable_found = true;
-          continue;
-        }
-        break;
-      }
-      case 'l': {
-        // allowed: log segment
-        char canary;
-        segment_id *sid = RCU::rcu_alloc();
-        DEFER_UNLESS(success, RCU::rcu_free(sid));
+      break;
+    }
+    case 'l': {
+      // allowed: log segment
+      char canary;
+      segment_id *sid = RCU::rcu_alloc();
+      DEFER_UNLESS(success, RCU::rcu_free(sid));
 
-        int n = sscanf(fname, SEGMENT_FILE_NAME_FMT "%c", &sid->segnum,
-                       &sid->start_offset, &sid->end_offset, &canary);
-        if (n == 3) {
-          THROW_IF(not is_aligned(sid->start_offset), log_file_error,
-                   "Misaligned start for log segment %u: %zx", sid->segnum,
-                   size_t(sid->start_offset));
-          size_t ssize = sid->end_offset - sid->start_offset;
-          THROW_IF(not is_aligned(ssize, LOG_SEGMENT_ALIGN), log_file_error,
-                   "Invalid size for log segment %u: %zx", sid->segnum, ssize);
+      int n = sscanf(fname, SEGMENT_FILE_NAME_FMT "%c", &sid->segnum,
+                     &sid->start_offset, &sid->end_offset, &canary);
+      if (n == 3) {
+        THROW_IF(not is_aligned(sid->start_offset), log_file_error,
+                 "Misaligned start for log segment %u: %zx", sid->segnum,
+                 size_t(sid->start_offset));
+        size_t ssize = sid->end_offset - sid->start_offset;
+        THROW_IF(not is_aligned(ssize, LOG_SEGMENT_ALIGN), log_file_error,
+                 "Invalid size for log segment %u: %zx", sid->segnum, ssize);
 
-          /* During recovery/startup, segments are added to the
-             list out of order (we sort later) and with byte
-             offset zero. The latter works because exactly one
-             segment will be writable once startup completes,
-             and the possibility of a hole in the log means we
-             don't know yet which segment that will be.
-           */
-          sid->byte_offset = 0;
-          sid->fd = os_openat(dfd, fname, O_RDONLY);
-          tmp.push_back(sid);
-          success = true;
-          continue;
-        }
-        break;
+        /* During recovery/startup, segments are added to the
+           list out of order (we sort later) and with byte
+           offset zero. The latter works because exactly one
+           segment will be writable once startup completes,
+           and the possibility of a hole in the log means we
+           don't know yet which segment that will be.
+         */
+        sid->byte_offset = 0;
+        sid->fd = os_openat(dfd, fname, O_RDONLY);
+        tmp.push_back(sid);
+        success = true;
+        continue;
       }
-      case 'n': {
-        // allowed: new log segment file
-        char canary;
-        uint32_t segnum;
-        int n = sscanf(fname, NXT_SEG_FILE_NAME_FMT "%c", &segnum, &canary);
-        if (n == 1) {
-          THROW_IF(nxt_seg_found, log_file_error,
-                   "Multiple new segments found");
+      break;
+    }
+    case 'n': {
+      // allowed: new log segment file
+      char canary;
+      uint32_t segnum;
+      int n = sscanf(fname, NXT_SEG_FILE_NAME_FMT "%c", &segnum, &canary);
+      if (n == 1) {
+        THROW_IF(nxt_seg_found, log_file_error, "Multiple new segments found");
 
-          uint64_t fd = os_openat(dfd, fname, O_RDONLY);
-          nxt_segment_fd = (fd << 32) | segnum;
-          nxt_seg_found = true;
-          continue;
-        }
-        break;
-      }
-      case 'o': {
-        // OID array chkpt file
+        uint64_t fd = os_openat(dfd, fname, O_RDONLY);
+        nxt_segment_fd = (fd << 32) | segnum;
+        nxt_seg_found = true;
         continue;
       }
-      case 'r': {
-        // Background async replay bounds file
-        continue;
-      }
-      case 'm': {
-        // Command log. TODO(tzwang): recovery
-        continue;
-      }
-      default:
-        break;
+      break;
+    }
+    case 'o': {
+      // OID array chkpt file
+      continue;
+    }
+    case 'r': {
+      // Background async replay bounds file
+      continue;
+    }
+    case 'm': {
+      // Command log. TODO(tzwang): recovery
+      continue;
+    }
+    default:
+      break;
     }
 
     // we only get here if we hit a bad file name

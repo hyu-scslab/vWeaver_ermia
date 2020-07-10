@@ -2,8 +2,8 @@
 
 #include "../varstr.h"
 
-#include "sm-log-defs.h"
 #include "sm-log-alloc.h"
+#include "sm-log-defs.h"
 
 namespace ermia {
 

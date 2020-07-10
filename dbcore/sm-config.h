@@ -1,10 +1,10 @@
 #pragma once
-#include <atomic>
 #include <cpuid.h>
+#include <numa.h>
 #include <x86intrin.h>
+#include <atomic>
 #include <iostream>
 #include <string>
-#include <numa.h>
 #include "sm-defs.h"
 
 namespace ermia {
@@ -108,24 +108,16 @@ enum BackupReplayPolicy {
 //             batch, i.e., backup's persist operation of batch i is
 //             overlapped with forward processing of batch i+1 on the
 //             primary.
-enum BackupPersistPolicy {
-  kPersistSync,
-  kPersistAsync,
-  kPersistPipelined
-};
+enum BackupPersistPolicy { kPersistSync, kPersistAsync, kPersistPipelined };
 
 enum NvramDelayType { kDelayNone, kDelayClflush, kDelayClwbEmu };
 
 enum SystemState { kStateLoading, kStateForwardProcessing, kStateShutdown };
-inline bool IsLoading() {
-  return volatile_read(state) == kStateLoading;
-}
+inline bool IsLoading() { return volatile_read(state) == kStateLoading; }
 inline bool IsForwardProcessing() {
   return volatile_read(state) == kStateForwardProcessing;
 }
-inline bool IsShutdown() {
-  return volatile_read(state) == kStateShutdown;
-}
+inline bool IsShutdown() { return volatile_read(state) == kStateShutdown; }
 
 // Warm-up policy when recovering from a chkpt or the log.
 // Set by --recovery-warm-up=[lazy/eager/whatever].

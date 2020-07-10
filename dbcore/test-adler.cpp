@@ -7,8 +7,8 @@
 #include <cstdlib>
 #include <cstring>
 
-#include <unistd.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 uint32_t /*__attribute__((aligned(16)))*/ DATA[] = {
     0x45072b09, 0xa221a546, 0xaa688b72, 0xa8b75579, 0x638f3f8b, 0x738b4787,
@@ -385,10 +385,10 @@ uint32_t __attribute__((noinline)) adler32_custom(char *data, size_t nbytes)
 }
 #endif
 
-#include "stopwatch.h"
+#include <fcntl.h>
 #include <sys/mman.h>
 #include <unistd.h>
-#include <fcntl.h>
+#include "stopwatch.h"
 
 void bakeoff(char const *msg, size_t nbytes, char *data, size_t len) {
   printf("\n\n%s (%zd bytes):\n", msg, len);

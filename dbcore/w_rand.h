@@ -93,8 +93,7 @@ struct w_rand {
   w_rand(uint32_t const *w, size_t n) : _state(0) { seed(w, n); }
 
   template <size_t N>
-  w_rand(uint32_t const(&w)[N])
-      : _state(0) {
+  w_rand(uint32_t const (&w)[N]) : _state(0) {
     seed(w);
   }
 
@@ -109,7 +108,7 @@ struct w_rand {
   void seed(uint32_t const *w, size_t n);
 
   template <size_t N>
-  void seed(uint32_t const(&w)[N]) {
+  void seed(uint32_t const (&w)[N]) {
     seed(w, N);
   }
 

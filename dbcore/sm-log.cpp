@@ -1,9 +1,9 @@
+#include <cstring>
 #include "sm-log-impl.h"
 #include "sm-log-offset.h"
-#include "sm-oid.h"
 #include "sm-oid-impl.h"
+#include "sm-oid.h"
 #include "sm-thread.h"
-#include <cstring>
 
 namespace ermia {
 
@@ -133,14 +133,14 @@ LSN sm_log::cur_lsn() {
   auto *sid = log->_lm.get_offset_segment(offset);
 
   if (not sid) {
-  /* must have raced a new segment opening */
-  /*
-  while (1) {
-          sid = log->_lm._newest_segment();
-          if (sid->start_offset >= offset)
-                  break;
-  }
-  */
+    /* must have raced a new segment opening */
+    /*
+    while (1) {
+            sid = log->_lm._newest_segment();
+            if (sid->start_offset >= offset)
+                    break;
+    }
+    */
 
   retry:
     sid = log->_lm._newest_segment();
@@ -190,8 +190,6 @@ void sm_log::wait_for_durable_flushed_lsn_offset(uint64_t offset) {
   self->_lm.wait_for_durable(offset);
 }
 
-void sm_log::log_debug() {
-	return;
-}
+void sm_log::log_debug() { return; }
 
 }  // namespace ermia

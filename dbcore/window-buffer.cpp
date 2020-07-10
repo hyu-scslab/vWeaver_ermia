@@ -1,8 +1,8 @@
 #include "window-buffer.h"
 
 #include "sm-common.h"
-#include "sm-exceptions.h"
 #include "sm-config.h"
+#include "sm-exceptions.h"
 
 #include <cstring>
 
@@ -13,10 +13,10 @@
 #ifdef USE_WINAPI
 #include <windows.h>
 #else
-#include <unistd.h>
 #include <sys/mman.h>
-#include <cstdlib>
+#include <unistd.h>
 #include <cerrno>
+#include <cstdlib>
 #endif
 
 namespace ermia {
@@ -78,9 +78,9 @@ char *window_buffer::_get_ptr(size_t offset) {
 
 void window_buffer::advance_writer(size_t new_wbegin) {
   LOG_IF(FATAL, new_wbegin < write_begin())
-         << "Attempt to advance writer backwards";
+      << "Attempt to advance writer backwards";
   LOG_IF(FATAL, write_end() < new_wbegin)
-         << "Cannot advance past end of write window";
+      << "Cannot advance past end of write window";
   _tail = new_wbegin;
 }
 

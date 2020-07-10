@@ -29,7 +29,8 @@ class IndexDescriptor {
   static inline OrderedIndex* GetIndex(FID fid) {
     return fid_map[fid]->GetIndex();
   }
-  static inline IndexDescriptor* New(OrderedIndex *index, std::string name, const char* primary = nullptr) {
+  static inline IndexDescriptor* New(OrderedIndex* index, std::string name,
+                                     const char* primary = nullptr) {
     if (primary) {
       std::string p(primary);
       name_map[name] = new IndexDescriptor(index, name, p);
@@ -54,8 +55,9 @@ class IndexDescriptor {
   oid_array* aux_array_;
 
  public:
-  IndexDescriptor(OrderedIndex *index, std::string& name);
-  IndexDescriptor(OrderedIndex *index, std::string& name, std::string& primary_name);
+  IndexDescriptor(OrderedIndex* index, std::string& name);
+  IndexDescriptor(OrderedIndex* index, std::string& name,
+                  std::string& primary_name);
 
   void Initialize();
   void Recover(FID tuple_fid, FID key_fid, OID himark = 0);
@@ -64,11 +66,13 @@ class IndexDescriptor {
   inline OrderedIndex* GetIndex() { return index_; }
   inline FID GetTupleFid() { return tuple_fid_; }
   inline FID GetKeyFid() {
-    ASSERT(!config::is_backup_srv() || (config::command_log && config::replay_threads));
+    ASSERT(!config::is_backup_srv() ||
+           (config::command_log && config::replay_threads));
     return aux_fid_;
   }
   inline oid_array* GetKeyArray() {
-    ASSERT(!config::is_backup_srv() || (config::command_log && config::replay_threads));
+    ASSERT(!config::is_backup_srv() ||
+           (config::command_log && config::replay_threads));
     return aux_array_;
   }
   inline FID GetPersistentAddressFid() {

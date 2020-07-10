@@ -1,7 +1,7 @@
-#include "rcu.h"
-#include "sm-cmd-log.h"
 #include "sm-rep.h"
 #include "../ermia.h"
+#include "rcu.h"
+#include "sm-cmd-log.h"
 
 namespace ermia {
 namespace rep {
@@ -67,24 +67,27 @@ void PrimaryAsyncShippingDaemon() {
   ALWAYS_ASSERT(config::persist_policy == config::kPersistAsync);
   uint64_t start_offset = logmgr->durable_flushed_lsn().offset();
   // FIXME(tzwang): support segment boundary crossing
-  auto* sid = logmgr->get_offset_segment(start_offset);
+  auto *sid = logmgr->get_offset_segment(start_offset);
   int log_fd = logmgr->open_segment_for_read(sid);
   while (!config::IsShutdown()) {
-    while (logmgr->durable_flushed_lsn().offset() - start_offset < config::group_commit_bytes) {
+    while (logmgr->durable_flushed_lsn().offset() - start_offset <
+           config::group_commit_bytes) {
       std::unique_lock<std::mutex> lock(async_ship_mutex);
       async_ship_cond.wait(lock);
     }
-    uint32_t size = std::min<uint64_t>(config::group_commit_bytes,
-      logmgr->durable_flushed_lsn().offset() - start_offset);
+    uint32_t size = std::min<uint64_t>(
+        config::group_commit_bytes,
+        logmgr->durable_flushed_lsn().offset() - start_offset);
     ALWAYS_ASSERT(size);
     for (int &fd : backup_sockfds) {
       // Send real log data, size first
-      uint32_t nbytes = send(fd, (char*)&size, sizeof(uint32_t), 0);
-      LOG_IF(FATAL, nbytes != sizeof(uint32_t)) << "Incomplete log shipping (header)";
+      uint32_t nbytes = send(fd, (char *)&size, sizeof(uint32_t), 0);
+      LOG_IF(FATAL, nbytes != sizeof(uint32_t))
+          << "Incomplete log shipping (header)";
       uint32_t to_send = size;
       auto off = sid->offset(start_offset);
       while (to_send) {
-        nbytes = sendfile(fd, log_fd, (off_t*)&off, to_send);
+        nbytes = sendfile(fd, log_fd, (off_t *)&off, to_send);
         to_send -= nbytes;
       }
     }
@@ -115,7 +118,7 @@ void BackupBackgroundReplay() {
         // Load up ranges from storage
         ReplayPipelineStage tmp_stage;
         while (true) {
-          uint32_t nbytes = os_pread(replay_bounds_fd, (char*)&tmp_stage,
+          uint32_t nbytes = os_pread(replay_bounds_fd, (char *)&tmp_stage,
                                      sizeof(ReplayPipelineStage), off);
           if (nbytes != sizeof(ReplayPipelineStage)) {
             std::unique_lock<std::mutex> lock(bg_replay_mutex);
@@ -129,7 +132,8 @@ void BackupBackgroundReplay() {
           break;
         }
 
-        while (stage.end_lsn.offset() > volatile_read(replayed_lsn_offset)) {}
+        while (stage.end_lsn.offset() > volatile_read(replayed_lsn_offset)) {
+        }
         DLOG(INFO) << "To replay " << std::hex << tmp_stage.start_lsn.offset()
                    << "-" << tmp_stage.end_lsn.offset() << std::endl;
         memcpy(stage.log_redo_partition_bounds,
@@ -143,7 +147,9 @@ void BackupBackgroundReplay() {
         volatile_write(stage.start_lsn._val, start_lsn._val);
 
         // No read-from-logbuf, at least for now
-        while (tmp_stage.end_lsn.offset() > logmgr->durable_flushed_lsn().offset()) {}
+        while (tmp_stage.end_lsn.offset() >
+               logmgr->durable_flushed_lsn().offset()) {
+        }
         volatile_write(stage.end_lsn._val, tmp_stage.end_lsn._val);
 
         start_lsn = tmp_stage.end_lsn;
@@ -155,12 +161,14 @@ void BackupBackgroundReplay() {
       DEFER(RCU::rcu_exit());
       end_lsn = logmgr->durable_flushed_lsn();
       if (end_lsn.offset() > start_lsn.offset()) {
-        if (end_lsn.offset() - start_lsn.offset() > config::group_commit_bytes) {
+        if (end_lsn.offset() - start_lsn.offset() >
+            config::group_commit_bytes) {
           uint64_t end_offset = start_lsn.offset() + config::group_commit_bytes;
-          end_lsn = LSN::make(end_offset, start_lsn.segment(), INVALID_SIZE_CODE);
+          end_lsn =
+              LSN::make(end_offset, start_lsn.segment(), INVALID_SIZE_CODE);
         }
-        DLOG(INFO) << "To replay "  << std::hex << start_lsn.offset() << "-"
-          << end_lsn.offset() << std::dec;
+        DLOG(INFO) << "To replay " << std::hex << start_lsn.offset() << "-"
+                   << end_lsn.offset() << std::dec;
         // backup_redo_log_by_oid returns the last log block's starting LSN, so
         // that when we hit an incomplete log block we know where to start in
         // the next round. This is needed only for OID parallel replay (the
@@ -173,7 +181,8 @@ void BackupBackgroundReplay() {
       }
     }
   }
-  while (volatile_read(replayed_lsn_offset) < end_lsn.offset()) {};
+  while (volatile_read(replayed_lsn_offset) < end_lsn.offset()) {
+  };
 }
 
 void BackupStartReplication() {
@@ -185,14 +194,17 @@ void BackupStartReplication() {
     std::thread t(BackupDaemonTcpCommandLog);
     t.detach();
   } else {
-    volatile_write(persisted_nvram_offset, logmgr->durable_flushed_lsn().offset());
+    volatile_write(persisted_nvram_offset,
+                   logmgr->durable_flushed_lsn().offset());
     volatile_write(persisted_nvram_size, 0);
 
     if (config::replay_policy == config::kReplayBackground) {
       dirent_iterator dir(config::log_dir.c_str());
       int dfd = dir.dup();
-      replay_bounds_fd = openat(dfd, "replay_bounds", O_SYNC|O_CREAT|O_RDWR, S_IRUSR|S_IWUSR);
-      LOG_IF(FATAL, replay_bounds_fd <= 2) << "Unable to open bounds file: " << replay_bounds_fd;
+      replay_bounds_fd = openat(dfd, "replay_bounds", O_SYNC | O_CREAT | O_RDWR,
+                                S_IRUSR | S_IWUSR);
+      LOG_IF(FATAL, replay_bounds_fd <= 2)
+          << "Unable to open bounds file: " << replay_bounds_fd;
     } else {
       replay_bounds_fd = -1;
     }
@@ -336,7 +348,8 @@ backup_start_metadata *prepare_start_metadata(int &chkpt_fd,
   return md;
 }
 
-void BackupProcessLogData(ReplayPipelineStage &stage, LSN start_lsn, LSN end_lsn) {
+void BackupProcessLogData(ReplayPipelineStage &stage, LSN start_lsn,
+                          LSN end_lsn) {
   // Now "notify" the flusher to write log records out, asynchronously.
   volatile_write(new_end_lsn_offset, end_lsn.offset());
 
@@ -358,7 +371,7 @@ void BackupProcessLogData(ReplayPipelineStage &stage, LSN start_lsn, LSN end_lsn
     // Spill out to storage for futher use by the background replayer
     // FIXME(tzwang): we have only used tmpfs as 'storage' so the performance
     // impact should be very small). Add some in-memory caching if needed.
-    os_write(replay_bounds_fd, (char*)&stage, sizeof(ReplayPipelineStage));
+    os_write(replay_bounds_fd, (char *)&stage, sizeof(ReplayPipelineStage));
     bg_replay_cond.notify_all();
   }
 
@@ -387,8 +400,8 @@ void BackupProcessLogData(ReplayPipelineStage &stage, LSN start_lsn, LSN end_lsn
     } else {
       // Impose delays to emulate NVRAM if needed
       if (config::nvram_delay_type == config::kDelayClflush) {
-        segment_id* sid = logmgr->get_segment(start_lsn.segment());
-        const char* buf =
+        segment_id *sid = logmgr->get_segment(start_lsn.segment());
+        const char *buf =
             sm_log::logbuf->read_buf(sid->buf_offset(start_lsn.offset()), size);
         config::NvramClflush(buf, size);
       } else if (config::nvram_delay_type == config::kDelayClwbEmu) {
@@ -403,7 +416,8 @@ void BackupProcessLogData(ReplayPipelineStage &stage, LSN start_lsn, LSN end_lsn
   }
 
   if (config::replay_policy == config::kReplaySync) {
-    while (volatile_read(replayed_lsn_offset) != end_lsn.offset()) {}
+    while (volatile_read(replayed_lsn_offset) != end_lsn.offset()) {
+    }
     DLOG(INFO) << "[Backup] Rolled forward log " << std::hex
                << start_lsn.offset() << "." << start_lsn.segment() << "-"
                << end_lsn.offset() << "." << end_lsn.segment() << std::dec;

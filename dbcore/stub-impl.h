@@ -2,8 +2,8 @@
 
 #include "sm-defs.h"
 
-#include <typeinfo>
 #include <type_traits>
+#include <typeinfo>
 
 namespace ermia {
 

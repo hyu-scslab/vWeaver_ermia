@@ -1,14 +1,14 @@
 #include "sm-log.h"
-#include "w_rand.h"
 #include "stopwatch.h"
+#include "w_rand.h"
 
 #include <cstring>
 #include <map>
 #include <set>
 #include <unordered_set>
 
-#include <unistd.h>
 #include <fcntl.h>
+#include <unistd.h>
 
 using namespace RCU;
 
@@ -125,8 +125,9 @@ struct db_file {
 };
 
 void doit(w_rand &rng) {
-  auto no_recover = [](void *, sm_log_scan_mgr *, LSN, LSN)
-                        -> void { SPAM("Log recovery is a no-op here\n"); };
+  auto no_recover = [](void *, sm_log_scan_mgr *, LSN, LSN) -> void {
+    SPAM("Log recovery is a no-op here\n");
+  };
 
   // a quick sanity test
   auto rval = create_record(0x123, 0x456, 0x789, 50);
@@ -172,13 +173,13 @@ void doit(w_rand &rng) {
     fprintf(stderr, "%s: %s (preceded by %zd spaces)\n", label, str,
             str - r->data);
   };
-  auto print_no_payload =
-      [](char const *label, FID f, OID o, fat_ptr *where = NULL) {
-        if (where)
-          fprintf(stderr, "%s: F:%d O:%d P:%zd\n", label, f, o, where->_ptr);
-        else
-          fprintf(stderr, "%s: F:%d O:%d\n", label, f, o);
-      };
+  auto print_no_payload = [](char const *label, FID f, OID o,
+                             fat_ptr *where = NULL) {
+    if (where)
+      fprintf(stderr, "%s: F:%d O:%d P:%zd\n", label, f, o, where->_ptr);
+    else
+      fprintf(stderr, "%s: F:%d O:%d\n", label, f, o);
+  };
 
   std::map<FID, db_file> files;
   typedef decltype(*files.begin()) Entry;
@@ -226,97 +227,96 @@ void doit(w_rand &rng) {
                    DEFAULT_ALIGNMENT_BITS, &rptr);
   };
 
-  auto relocate_record =
-      [&](sm_tx_log *tx, Entry &entry, OID oid, bool verbose = true) {
-        auto &fid = entry.first;
-        auto &f = entry.second;
-        auto it = oid ? f.records.find(oid) : f.records.begin();
-        ASSERT(it != f.records.end());
-        oid = it->first;
-        auto &rptr = it->second.first;
-        auto &r = it->second.second;
-        ASSERT(fid == r->fid);
-        ASSERT(oid == r->oid);
+  auto relocate_record = [&](sm_tx_log *tx, Entry &entry, OID oid,
+                             bool verbose = true) {
+    auto &fid = entry.first;
+    auto &f = entry.second;
+    auto it = oid ? f.records.find(oid) : f.records.begin();
+    ASSERT(it != f.records.end());
+    oid = it->first;
+    auto &rptr = it->second.first;
+    auto &r = it->second.second;
+    ASSERT(fid == r->fid);
+    ASSERT(oid == r->oid);
 
-        rptr = heap_write(r);
-        if (verbose) print_no_payload("relocate", fid, oid, &rptr);
-        tx->log_relocate(fid, oid, rptr, DEFAULT_ALIGNMENT_BITS);
-      };
+    rptr = heap_write(r);
+    if (verbose) print_no_payload("relocate", fid, oid, &rptr);
+    tx->log_relocate(fid, oid, rptr, DEFAULT_ALIGNMENT_BITS);
+  };
 
-  auto delete_record =
-      [&](sm_tx_log *tx, Entry &entry, OID oid, bool verbose = true) {
-        auto &fid = entry.first;
-        auto &f = entry.second;
-        auto it = oid ? f.records.find(oid) : f.records.begin();
-        ASSERT(it != f.records.end());
-        oid = it->first;
-        auto r = it->second.second;
-        ASSERT(fid == r->fid);
-        ASSERT(oid == r->oid);
+  auto delete_record = [&](sm_tx_log *tx, Entry &entry, OID oid,
+                           bool verbose = true) {
+    auto &fid = entry.first;
+    auto &f = entry.second;
+    auto it = oid ? f.records.find(oid) : f.records.begin();
+    ASSERT(it != f.records.end());
+    oid = it->first;
+    auto r = it->second.second;
+    ASSERT(fid == r->fid);
+    ASSERT(oid == r->oid);
 
-        if (verbose) print_no_payload("delete", fid, oid);
-        tx->log_delete(fid, oid);
-        f.free_oid(it);
-      };
+    if (verbose) print_no_payload("delete", fid, oid);
+    tx->log_delete(fid, oid);
+    f.free_oid(it);
+  };
 
-  auto commit_and_verify_tx =
-      [&](sm_tx_log *tx, int nrec, bool verbose = true) {
-        if (heap_needs_sync) {
-          fdatasync(fd);
-          heap_needs_sync = false;
-        }
+  auto commit_and_verify_tx = [&](sm_tx_log *tx, int nrec,
+                                  bool verbose = true) {
+    if (heap_needs_sync) {
+      fdatasync(fd);
+      heap_needs_sync = false;
+    }
 
-        LSN blsn;
-        auto lsn = tx->commit(&blsn);
-        lm->wait_for_durable_lsn(lsn);
-        rcu_quiesce();
+    LSN blsn;
+    auto lsn = tx->commit(&blsn);
+    lm->wait_for_durable_lsn(lsn);
+    rcu_quiesce();
 
-        auto *scan = lm->get_scan_mgr()->new_tx_scan(blsn);
-        DEFER(delete scan);
+    auto *scan = lm->get_scan_mgr()->new_tx_scan(blsn);
+    DEFER(delete scan);
 
-        int i = 0;
-        for (; scan->valid(); scan->next()) {
-          ++i;
+    int i = 0;
+    for (; scan->valid(); scan->next()) {
+      ++i;
 
-          switch (scan->type()) {
-            case sm_log_scan_mgr::LOG_INSERT:
-            case sm_log_scan_mgr::LOG_UPDATE: {
-              scan->load_object(buf, BUFSZ);
-              auto *r = (db_record *)buf;
-              ASSERT(r->size() == scan->payload_size());
-              verify_record(r, verbose);
-              auto &entry = files[scan->fid()].records[scan->oid()];
-              ASSERT(entry.first == scan->payload_ptr());
-              ASSERT(not strcmp(r->data, entry.second->data));
-              break;
-            }
-            case sm_log_scan_mgr::LOG_RELOCATE: {
-              auto ptr = scan->payload_ptr();
-              ASSERT(ptr.asi_type() == fat_ptr::ASI_HEAP);
-              auto nbytes = scan->payload_size();
-              ASSERT(nbytes <= BUFSZ);
-              size_t n = os_pread(fd, buf, nbytes, ptr.offset());
-              ASSERT(n == nbytes);
-              auto *r = (db_record *)buf;
-              if (verbose)
-                print_no_payload("relocate", scan->fid(), scan->oid());
-              verify_record(r, verbose);
+      switch (scan->type()) {
+      case sm_log_scan_mgr::LOG_INSERT:
+      case sm_log_scan_mgr::LOG_UPDATE: {
+        scan->load_object(buf, BUFSZ);
+        auto *r = (db_record *)buf;
+        ASSERT(r->size() == scan->payload_size());
+        verify_record(r, verbose);
+        auto &entry = files[scan->fid()].records[scan->oid()];
+        ASSERT(entry.first == scan->payload_ptr());
+        ASSERT(not strcmp(r->data, entry.second->data));
+        break;
+      }
+      case sm_log_scan_mgr::LOG_RELOCATE: {
+        auto ptr = scan->payload_ptr();
+        ASSERT(ptr.asi_type() == fat_ptr::ASI_HEAP);
+        auto nbytes = scan->payload_size();
+        ASSERT(nbytes <= BUFSZ);
+        size_t n = os_pread(fd, buf, nbytes, ptr.offset());
+        ASSERT(n == nbytes);
+        auto *r = (db_record *)buf;
+        if (verbose) print_no_payload("relocate", scan->fid(), scan->oid());
+        verify_record(r, verbose);
 
-              auto &entry = files[scan->fid()].records[scan->oid()];
-              ASSERT(entry.first.offset() == ptr.offset());
-              ASSERT(not strcmp(r->data, entry.second->data));
-              break;
-            }
-            case sm_log_scan_mgr::LOG_DELETE: {
-              if (verbose) print_no_payload("delete", scan->fid(), scan->oid());
-              break;
-            }
-            default:
-              DIE("unreachable");
-          }
-        }
-        ASSERT(i == nrec);
-      };
+        auto &entry = files[scan->fid()].records[scan->oid()];
+        ASSERT(entry.first.offset() == ptr.offset());
+        ASSERT(not strcmp(r->data, entry.second->data));
+        break;
+      }
+      case sm_log_scan_mgr::LOG_DELETE: {
+        if (verbose) print_no_payload("delete", scan->fid(), scan->oid());
+        break;
+      }
+      default:
+        DIE("unreachable");
+      }
+    }
+    ASSERT(i == nrec);
+  };
 
   auto start_lsn = lm->durable_lsn();
   {
@@ -490,18 +490,18 @@ void doit(w_rand &rng) {
       auto it = files.find(fid);
       ASSERT(it != files.end());
       switch (rng.randn(4)) {
-        case 0:
-          // delete
-          delete_record(tx, *it, oid, false);
-          break;
-        case 1:
-          // relocate
-          relocate_record(tx, *it, oid, false);
-          break;
-        default:
-          // update
-          update_record(tx, *it, oid, 20, 200, false);
-          break;
+      case 0:
+        // delete
+        delete_record(tx, *it, oid, false);
+        break;
+      case 1:
+        // relocate
+        relocate_record(tx, *it, oid, false);
+        break;
+      default:
+        // update
+        update_record(tx, *it, oid, 20, 200, false);
+        break;
       }
     }
 
@@ -523,21 +523,21 @@ void doit(w_rand &rng) {
       int id = (scan->fid() - 1) * FSIZE + (scan->oid() - 1);
       auto it = recovered.find(id);
       switch (scan->type()) {
-        case sm_log_scan_mgr::LOG_DELETE:
-          ASSERT(it != recovered.end());
-          recovered.erase(it);
-          break;
-        case sm_log_scan_mgr::LOG_INSERT:
-          ASSERT(it == recovered.end());
-          recovered[id] = scan->payload_ptr();
-          break;
-        case sm_log_scan_mgr::LOG_UPDATE:
-        case sm_log_scan_mgr::LOG_RELOCATE:
-          ASSERT(it != recovered.end());
-          it->second = scan->payload_ptr();
-          break;
-        default:
-          DIE("unreachable");
+      case sm_log_scan_mgr::LOG_DELETE:
+        ASSERT(it != recovered.end());
+        recovered.erase(it);
+        break;
+      case sm_log_scan_mgr::LOG_INSERT:
+        ASSERT(it == recovered.end());
+        recovered[id] = scan->payload_ptr();
+        break;
+      case sm_log_scan_mgr::LOG_UPDATE:
+      case sm_log_scan_mgr::LOG_RELOCATE:
+        ASSERT(it != recovered.end());
+        it->second = scan->payload_ptr();
+        break;
+      default:
+        DIE("unreachable");
       }
     }
 
@@ -599,11 +599,11 @@ void doit(w_rand &rng) {
   verify(lm->get_scan_mgr(), start_lsn);
 
   printf("\nTry to recover from a newly instantiated log\n");
-  auto verify_wrapper =
-      [](void *arg, sm_log_scan_mgr *srm, LSN chkpt_start, LSN chkpt_end) {
-        verify_fn *fn = (verify_fn *)arg;
-        (*fn)(srm, chkpt_start);
-      };
+  auto verify_wrapper = [](void *arg, sm_log_scan_mgr *srm, LSN chkpt_start,
+                           LSN chkpt_end) {
+    verify_fn *fn = (verify_fn *)arg;
+    (*fn)(srm, chkpt_start);
+  };
 
   delete lm;
   lm = NULL;

@@ -76,13 +76,13 @@ class RdmaNode {
   inline bool IsInitialized() { return status_ == kStatusInitialized; }
   inline void SetActive() { status_ = kStatusActive; }
   inline void SetInitialized() { status_ = kStatusInitialized; }
-  inline char *GetClientAddress() { return client_addr_; }
+  inline char* GetClientAddress() { return client_addr_; }
   inline uint32_t GetLogBufferIndex() { return log_buf_ridx_; }
   inline uint32_t GetBoundsIndex() { return log_redo_partition_bounds_ridx_; }
 
   inline void WaitForMessageAsPrimary(uint64_t msg, bool reset = true) {
     ALWAYS_ASSERT(!config::is_backup_srv());
-    uint64_t *p = (uint64_t*)GetMemoryRegion(msg_buf_ridx_);
+    uint64_t* p = (uint64_t*)GetMemoryRegion(msg_buf_ridx_);
     while (true) {
       uint64_t m = volatile_read(*p);
       if (m & msg) {

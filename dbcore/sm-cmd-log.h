@@ -4,14 +4,14 @@
 
 #include <fcntl.h>
 
-#include "sm-common.h"
-#include "sm-thread.h"
 #include "../macros.h"
 #include "../util.h"
+#include "sm-common.h"
+#include "sm-thread.h"
 
 namespace ermia {
 
-/* 
+/*
  * A very simple implementation of command logging. Each log record
  * is fixed-size (8 bytes) containing a partition ID and a transaction
  * type (support TPCC so far only).
@@ -23,7 +23,7 @@ extern std::condition_variable redo_cond;
 extern std::mutex redo_mutex;
 extern uint64_t next_replay_offset[2];
 
-typedef std::function<void(uint32_t, void*)> RedoWorkloadFunction;
+typedef std::function<void(uint32_t, void *)> RedoWorkloadFunction;
 
 struct LogRecord {
   static const uint32_t kInvalidPartition = ~uint32_t{0};
@@ -32,12 +32,15 @@ struct LogRecord {
   uint32_t partition_id;
   uint32_t transaction_type;
 
-  LogRecord() : partition_id(kInvalidPartition), transaction_type(kInvalidTransaction) {}
-  LogRecord(uint32_t part, uint32_t xct) : partition_id(part), transaction_type(xct) {}
+  LogRecord()
+      : partition_id(kInvalidPartition),
+        transaction_type(kInvalidTransaction) {}
+  LogRecord(uint32_t part, uint32_t xct)
+      : partition_id(part), transaction_type(xct) {}
 };
 
 class CommandLogManager {
-private:
+ private:
   uint32_t buffer_size_;
   std::atomic<bool> shutdown_;
   std::atomic<uint64_t> allocated_;
@@ -54,19 +57,19 @@ private:
   void ShipLog(char *buf, uint32_t size);
   void Flush(bool check_tls = true);
 
-public:
+ public:
   CommandLogManager()
-    : buffer_size_(config::command_log_buffer_mb * config::MB)
-    , shutdown_(false)
-    , allocated_(0)
-    , durable_offset_(0) {
+      : buffer_size_(config::command_log_buffer_mb * config::MB),
+        shutdown_(false),
+        allocated_(0),
+        durable_offset_(0) {
     flush_status_ = 2;
     // FIXME(tzwang): allow more flexibility
     // Ensure this so we can blindly flush the whole buffer without worrying
     // about boundaries.
     uint32_t buf_size = config::command_log_buffer_mb * config::MB;
     LOG_IF(FATAL, buf_size % sizeof(LogRecord) != 0);
-    buffer_ = (char*)malloc(buf_size);
+    buffer_ = (char *)malloc(buf_size);
     memset(buffer_, 0, buf_size);
 
     tls_offsets_ = (uint64_t *)malloc(sizeof(uint64_t) * config::MAX_THREADS);
@@ -78,7 +81,7 @@ public:
     dirent_iterator dir(config::log_dir.c_str());
     int dfd = dir.dup();
     std::string fname = config::log_dir + std::string("/mlog");
-    fd_ = os_openat(dfd, + fname.c_str(), O_CREAT | O_WRONLY | O_SYNC);
+    fd_ = os_openat(dfd, +fname.c_str(), O_CREAT | O_WRONLY | O_SYNC);
     flusher_ = std::thread(&CommandLogManager::FlushDaemon, this);
   }
   ~CommandLogManager();

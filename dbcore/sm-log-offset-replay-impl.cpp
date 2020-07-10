@@ -3,16 +3,16 @@
 #include "rcu.h"
 #include "sm-index.h"
 #include "sm-log-recover-impl.h"
-#include "sm-oid.h"
-#include "sm-oid-impl.h"
 #include "sm-oid-alloc-impl.h"
-#include "sm-rep.h"
+#include "sm-oid-impl.h"
+#include "sm-oid.h"
 #include "sm-rep-rdma.h"
+#include "sm-rep.h"
 
 namespace ermia {
 
-LSN parallel_offset_replay::operator()(void *arg, sm_log_scan_mgr *s,
-                                       LSN from, LSN to) {
+LSN parallel_offset_replay::operator()(void *arg, sm_log_scan_mgr *s, LSN from,
+                                       LSN to) {
   MARK_REFERENCED(arg);
   MARK_REFERENCED(from);
   scanner = s;
@@ -56,9 +56,9 @@ void parallel_offset_replay::redo_runner::persist_logbuf_partition() {
 void parallel_offset_replay::redo_runner::redo_logbuf_partition() {
   uint64_t icount = 0, ucount = 0, size = 0, iicount = 0, dcount = 0;
   // FIXME(tzwang): must read from storage for background async replay
-  auto *scan =
-      owner->scanner->new_log_scan(start_lsn, config::eager_warm_up(),
-         config::replay_policy != config::kReplayBackground);
+  auto *scan = owner->scanner->new_log_scan(
+      start_lsn, config::eager_warm_up(),
+      config::replay_policy != config::kReplayBackground);
 
   util::timer t;
   while (!config::IsShutdown()) {
@@ -82,32 +82,32 @@ void parallel_offset_replay::redo_runner::redo_logbuf_partition() {
     auto fid = scan->fid();
 
     switch (scan->type()) {
-      case sm_log_scan_mgr::LOG_UPDATE_KEY:
-        owner->recover_update_key(scan);
-        break;
-      case sm_log_scan_mgr::LOG_UPDATE:
-      case sm_log_scan_mgr::LOG_RELOCATE:
-        ucount++;
-        owner->recover_update(scan, false, true);
-        break;
-      case sm_log_scan_mgr::LOG_ENHANCED_DELETE:
-        dcount++;
-        owner->recover_update(scan, true, true);
-        break;
-      case sm_log_scan_mgr::LOG_INSERT_INDEX:
-        iicount++;
-        owner->recover_index_insert(scan);
-        break;
-      case sm_log_scan_mgr::LOG_INSERT:
-        icount++;
-        owner->recover_insert(scan, true);
-        break;
-      case sm_log_scan_mgr::LOG_FID:
-        // The main recover function should have already did this
-        ASSERT(oidmgr->file_exists(scan->fid()));
-        break;
-      default:
-        DIE("unreachable");
+    case sm_log_scan_mgr::LOG_UPDATE_KEY:
+      owner->recover_update_key(scan);
+      break;
+    case sm_log_scan_mgr::LOG_UPDATE:
+    case sm_log_scan_mgr::LOG_RELOCATE:
+      ucount++;
+      owner->recover_update(scan, false, true);
+      break;
+    case sm_log_scan_mgr::LOG_ENHANCED_DELETE:
+      dcount++;
+      owner->recover_update(scan, true, true);
+      break;
+    case sm_log_scan_mgr::LOG_INSERT_INDEX:
+      iicount++;
+      owner->recover_index_insert(scan);
+      break;
+    case sm_log_scan_mgr::LOG_INSERT:
+      icount++;
+      owner->recover_insert(scan, true);
+      break;
+    case sm_log_scan_mgr::LOG_FID:
+      // The main recover function should have already did this
+      ASSERT(oidmgr->file_exists(scan->fid()));
+      break;
+    default:
+      DIE("unreachable");
     }
     size += scan->payload_size();
     scan->next();
@@ -118,8 +118,8 @@ void parallel_offset_replay::redo_runner::redo_logbuf_partition() {
   DLOG(INFO) << "[Recovery.log] 0x" << std::hex << start_lsn.offset() << "-"
              << end_lsn.offset()
              << " inserts/updates/deletes/size: " << std::dec << icount << "/"
-             << ucount << "/" << dcount << "/" << size << " "
-             << redo_latency_us << "us so far";
+             << ucount << "/" << dcount << "/" << size << " " << redo_latency_us
+             << "us so far";
 
   // Normally we'd also recreate_allocator here; for log shipping
   // redo this takes ~10% of total cycles (need to take a lock etc),
@@ -156,7 +156,7 @@ void parallel_offset_replay::redo_runner::MyWork(char *) {
   while (true) {
     for (uint32_t i = 0; i < 2; ++i) {
       uint32_t num_ranges = 0;
-      rep::ReplayPipelineStage& stage = rep::pipeline_stages[i];
+      rep::ReplayPipelineStage &stage = rep::pipeline_stages[i];
       LSN stage_end = INVALID_LSN;
       do {
         stage_end = volatile_read(stage.end_lsn);
@@ -165,15 +165,16 @@ void parallel_offset_replay::redo_runner::MyWork(char *) {
       LSN stage_start = volatile_read(stage.start_lsn);
       ASSERT(stage_start.segment() == stage_end.segment());
 
-      DLOG(INFO) << "Start to roll " << std::hex << stage_start.offset()
-        << "-" << stage_end.offset() << std::dec << " " << i;
+      DLOG(INFO) << "Start to roll " << std::hex << stage_start.offset() << "-"
+                 << stage_end.offset() << std::dec << " " << i;
 
       // Find myself a partition
       uint64_t min_offset = ~uint64_t{0};
       uint64_t idx = -1;
       for (uint32_t j = 0; j < config::log_redo_partitions; ++j) {
         LSN bound = LSN{stage.log_redo_partition_bounds[j]};
-        if (bound.offset() < min_offset && bound.offset() > stage_start.offset()) {
+        if (bound.offset() < min_offset &&
+            bound.offset() > stage_start.offset()) {
           min_offset = bound.offset();
           idx = j;
         }
@@ -184,9 +185,10 @@ void parallel_offset_replay::redo_runner::MyWork(char *) {
         bool done = false;
         while (!done) {
           end_lsn = LSN{stage.log_redo_partition_bounds[idx]};
-          if (end_lsn.offset() < stage_start.offset() || end_lsn.offset() > stage.end_lsn.offset()) {
-              end_lsn = stage_end;
-              done = true;
+          if (end_lsn.offset() < stage_start.offset() ||
+              end_lsn.offset() > stage.end_lsn.offset()) {
+            end_lsn = stage_end;
+            done = true;
           }
           if (start_lsn == end_lsn) {
             break;
@@ -195,10 +197,12 @@ void parallel_offset_replay::redo_runner::MyWork(char *) {
           // faster and get the work. So it's important to have each thread do
           // some amount of non-trivial work after claiming a partition (e.g.,
           // persist it or replay it).
-          if (stage.consumed[idx].exchange(true, std::memory_order_seq_cst) == false) {
-            DLOG(INFO) << "[Backup] found log partition " << std::hex << start_lsn.offset()
-                       << "." << start_lsn.segment() << "-" << end_lsn.offset() << "."
-                       << end_lsn.segment() << std::dec;
+          if (stage.consumed[idx].exchange(true, std::memory_order_seq_cst) ==
+              false) {
+            DLOG(INFO) << "[Backup] found log partition " << std::hex
+                       << start_lsn.offset() << "." << start_lsn.segment()
+                       << "-" << end_lsn.offset() << "." << end_lsn.segment()
+                       << std::dec;
             if (persist_first) {
               ranges[num_ranges].start = start_lsn;
               ranges[num_ranges].end = end_lsn;
@@ -223,7 +227,8 @@ void parallel_offset_replay::redo_runner::MyWork(char *) {
         }
         if (--stage.num_replaying_threads == 0) {
           volatile_write(rep::replayed_lsn_offset, stage.end_lsn.offset());
-          DLOG(INFO) << "replayed_lsn_offset=" << std::hex << rep::replayed_lsn_offset << std::dec;
+          DLOG(INFO) << "replayed_lsn_offset=" << std::hex
+                     << rep::replayed_lsn_offset << std::dec;
           is_last_thread = true;
         }
       } else {
@@ -235,15 +240,17 @@ void parallel_offset_replay::redo_runner::MyWork(char *) {
             persist_logbuf_partition();
           }
           redo_logbuf_partition();
-          DLOG(INFO) << "[Backup] Rolled forward log " << std::hex << start_lsn.offset()
-                     << "." << start_lsn.segment() << "-" << end_lsn.offset() << "."
-                     << end_lsn.segment() << std::dec;
+          DLOG(INFO) << "[Backup] Rolled forward log " << std::hex
+                     << start_lsn.offset() << "." << start_lsn.segment() << "-"
+                     << end_lsn.offset() << "." << end_lsn.segment()
+                     << std::dec;
           volatile_write(rep::replayed_lsn_offset, stage.end_lsn.offset());
           is_last_thread = true;
         }
       }
       // Make sure everyone is finished before we look at the next stage
-      while (volatile_read(rep::replayed_lsn_offset) != stage_end.offset()) {}
+      while (volatile_read(rep::replayed_lsn_offset) != stage_end.offset()) {
+      }
     }
   }
 }

@@ -3,8 +3,8 @@
 #include "sm-defs.h"
 #include "w_rand.h"
 
-#include <cstdlib>
 #include <cstdio>
+#include <cstdlib>
 #include <deque>
 
 int main() {

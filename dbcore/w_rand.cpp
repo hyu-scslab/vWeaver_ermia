@@ -24,15 +24,18 @@
 #include "w_rand.h"
 #include "stopwatch.h"
 
-#include <utility>
-#include <unistd.h>
 #include <pthread.h>
+#include <unistd.h>
+#include <utility>
 
 w_rand::w_rand() : _state(0) {
   uint64_t now = stopwatch_t::now();
   uint32_t s[] = {
-      (uint32_t)(uintptr_t)&_state, (uint32_t)getpid(),
-      (uint32_t)(uintptr_t)pthread_self(), (uint32_t)now, (uint32_t)(now >> 32),
+      (uint32_t)(uintptr_t)&_state,
+      (uint32_t)getpid(),
+      (uint32_t)(uintptr_t)pthread_self(),
+      (uint32_t)now,
+      (uint32_t)(now >> 32),
   };
   seed(s);
 }

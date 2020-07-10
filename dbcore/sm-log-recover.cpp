@@ -1,12 +1,12 @@
+#include "sm-log-recover.h"
 #include "rcu.h"
 #include "sm-chkpt.h"
-#include "sm-log-recover.h"
-#include "sm-log-recover-impl.h"
 #include "sm-log-impl.h"
+#include "sm-log-recover-impl.h"
 #include "sm-oid.h"
 
-#include <cstring>
 #include <unistd.h>
+#include <cstring>
 
 namespace ermia {
 
@@ -31,7 +31,8 @@ sm_log_recover_mgr::sm_log_recover_mgr(sm_log_recover_impl *rf, void *rf_arg)
 
   auto *sid = get_segment(dlsn.segment());
   if (config::is_backup_srv()) {
-    if (config::replay_threads > 0 && config::replay_policy != config::kReplayNone) {
+    if (config::replay_threads > 0 &&
+        config::replay_policy != config::kReplayNone) {
       if (config::log_ship_offset_replay) {
         backup_replay_functor = new parallel_offset_replay;
       } else {
@@ -66,11 +67,13 @@ void sm_log_recover_mgr::redo_log(LSN start_lsn, LSN end_lsn) {
 }
 
 LSN sm_log_recover_mgr::backup_redo_log_by_oid(LSN start_lsn, LSN end_lsn) {
-  return (*backup_replay_functor)(recover_functor_arg, backup_replayer, start_lsn, end_lsn);
+  return (*backup_replay_functor)(recover_functor_arg, backup_replayer,
+                                  start_lsn, end_lsn);
 }
 
 void sm_log_recover_mgr::start_logbuf_redoers() {
-  (*backup_replay_functor)(recover_functor_arg, backup_replayer, INVALID_LSN, INVALID_LSN);
+  (*backup_replay_functor)(recover_functor_arg, backup_replayer, INVALID_LSN,
+                           INVALID_LSN);
 }
 
 sm_log_recover_mgr::~sm_log_recover_mgr() { delete scanner; }
@@ -85,7 +88,7 @@ sm_log_recover_mgr::block_scanner::block_scanner(sm_log_recover_mgr *lm,
       _fetch_payloads(fetch_payloads),
       _force_fetch_from_logbuf(force_fetch_from_logbuf),
       _buf((log_block *)RCU::rcu_alloc(fetch_payloads ? MAX_BLOCK_SIZE
-                                                 : MIN_BLOCK_FETCH)) {
+                                                      : MIN_BLOCK_FETCH)) {
   _load_block(start, _follow_overflow);
 }
 
@@ -286,15 +289,17 @@ void sm_log_recover_mgr::load_object(char *buf, size_t bufsz, fat_ptr ptr,
   ASSERT(sid);
   ASSERT(ptr.offset() >= sid->start_offset);
 
-  if (config::is_backup_srv() && config::persist_policy != config::kPersistAsync &&
-    ptr.offset() + nbytes > logmgr->durable_flushed_lsn().offset()) {
+  if (config::is_backup_srv() &&
+      config::persist_policy != config::kPersistAsync &&
+      ptr.offset() + nbytes > logmgr->durable_flushed_lsn().offset()) {
     return load_object_from_logbuf(buf, bufsz, ptr, align_bits);
   }
 
   size_t m = os_pread(sid->fd, buf, nbytes, ptr.offset() - sid->start_offset);
-  LOG_IF(FATAL, m != nbytes) << "Unable to read full object ("
-    << nbytes << " bytes needed, " << m << " read) at " << std::hex << ptr.offset()
-    << " ,durable offset " << logmgr->durable_flushed_lsn().offset() << std::dec;
+  LOG_IF(FATAL, m != nbytes)
+      << "Unable to read full object (" << nbytes << " bytes needed, " << m
+      << " read) at " << std::hex << ptr.offset() << " ,durable offset "
+      << logmgr->durable_flushed_lsn().offset() << std::dec;
 }
 
 fat_ptr sm_log_recover_mgr::load_ext_pointer(fat_ptr ext_ptr) {
@@ -354,37 +359,37 @@ void sm_log_scan_mgr::record_scan::next() { ++get_impl(this)->scan; }
 
 static sm_log_scan_mgr::record_type get_type(log_record_type tp) {
   switch (tp) {
-    case LOG_INSERT:
-    case LOG_INSERT_EXT:
-      return sm_log_scan_mgr::LOG_INSERT;
-    case LOG_INSERT_INDEX:
-      return sm_log_scan_mgr::LOG_INSERT_INDEX;
+  case LOG_INSERT:
+  case LOG_INSERT_EXT:
+    return sm_log_scan_mgr::LOG_INSERT;
+  case LOG_INSERT_INDEX:
+    return sm_log_scan_mgr::LOG_INSERT_INDEX;
 
-    case LOG_UPDATE:
-    case LOG_UPDATE_EXT:
-      return sm_log_scan_mgr::LOG_UPDATE;
-    case LOG_UPDATE_KEY:
-      return sm_log_scan_mgr::LOG_UPDATE_KEY;
+  case LOG_UPDATE:
+  case LOG_UPDATE_EXT:
+    return sm_log_scan_mgr::LOG_UPDATE;
+  case LOG_UPDATE_KEY:
+    return sm_log_scan_mgr::LOG_UPDATE_KEY;
 
-    case LOG_DELETE:
-      return sm_log_scan_mgr::LOG_DELETE;
-    case LOG_ENHANCED_DELETE:
-      return sm_log_scan_mgr::LOG_ENHANCED_DELETE;
+  case LOG_DELETE:
+    return sm_log_scan_mgr::LOG_DELETE;
+  case LOG_ENHANCED_DELETE:
+    return sm_log_scan_mgr::LOG_ENHANCED_DELETE;
 
-    case LOG_RELOCATE:
-      return sm_log_scan_mgr::LOG_RELOCATE;
+  case LOG_RELOCATE:
+    return sm_log_scan_mgr::LOG_RELOCATE;
 
-    case LOG_FID:
-      return sm_log_scan_mgr::LOG_FID;
+  case LOG_FID:
+    return sm_log_scan_mgr::LOG_FID;
 
-    case LOG_NOP:
-    case LOG_COMMENT:
-    case LOG_OVERFLOW:
-    case LOG_SKIP:
-    case LOG_FAT_SKIP:
-      throw illegal_argument("invalid record type");
-    default:
-      throw illegal_argument("unknown record type");
+  case LOG_NOP:
+  case LOG_COMMENT:
+  case LOG_OVERFLOW:
+  case LOG_SKIP:
+  case LOG_FAT_SKIP:
+    throw illegal_argument("invalid record type");
+  default:
+    throw illegal_argument("unknown record type");
   }
 }
 

@@ -1,8 +1,8 @@
 // -*- mode:c++ -*-
 #pragma once
 
-#include "sm-oid.h"
 #include "sm-oid-alloc-impl.h"
+#include "sm-oid.h"
 
 #include "stub-impl.h"
 

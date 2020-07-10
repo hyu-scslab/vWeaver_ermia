@@ -1,7 +1,7 @@
 #pragma once
 
-#include <cstddef>
 #include <stdint.h>
+#include <cstddef>
 
 #include <glog/logging.h>
 
@@ -105,9 +105,8 @@ struct window_buffer {
    */
   char *write_buf(size_t offset, size_t size) {
     LOG_IF(FATAL, write_begin() > offset)
-        << "Attempted write to region before before window "
-        << std::hex << write_begin()
-        << "/" << offset << std::dec;
+        << "Attempted write to region before before window " << std::hex
+        << write_begin() << "/" << offset << std::dec;
     if (write_end() < offset + size) {
       return NULL;
     }
@@ -121,7 +120,7 @@ struct window_buffer {
    */
   char const *read_buf(size_t offset, size_t size) {
     LOG_IF(FATAL, read_begin() > offset)
-      << "Attempted read from region before before window";
+        << "Attempted read from region before before window";
     if (read_end() < offset + size) {
       return NULL;
     }

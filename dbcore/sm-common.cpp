@@ -4,11 +4,11 @@
 
 #include <glog/logging.h>
 
+#include <sys/fcntl.h>
+#include <unistd.h>
+#include <cerrno>
 #include <cstdio>
 #include <cstdlib>
-#include <cerrno>
-#include <unistd.h>
-#include <sys/fcntl.h>
 #include <vector>
 
 namespace ermia {
@@ -69,8 +69,8 @@ size_t os_pread(int fd, char *buf, size_t bufsz, off_t offset) {
   while (n < bufsz) {
     ssize_t m = pread(fd, buf + n, bufsz - n, offset + n);
     if (not m) break;
-    LOG_IF(FATAL, m < 0)
-      << "Error reading " << bufsz << " bytes from file at offset " << offset;
+    LOG_IF(FATAL, m < 0) << "Error reading " << bufsz
+                         << " bytes from file at offset " << offset;
     n += m;
   }
   return n;

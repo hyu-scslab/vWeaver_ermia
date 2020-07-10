@@ -75,14 +75,14 @@ struct sm_log_alloc_mgr {
   void _kick_log_write_daemon();
   segment_id *PrimaryFlushLog(uint64_t new_dlsn_dlsn,
                               bool update_dmark = false);
-  void PrimaryShipLog(segment_id *durable_sid, uint64_t nbytes,
-                      bool new_seg, uint64_t new_offset, const char *buf);
+  void PrimaryShipLog(segment_id *durable_sid, uint64_t nbytes, bool new_seg,
+                      uint64_t new_offset, const char *buf);
   void PrimaryCommitPersistedWork(uint64_t new_offset);
   void BackupFlushLog(uint64_t new_dlsn_dlsn);
   uint64_t smallest_tls_lsn_offset();
   void enqueue_committed_xct(uint32_t worker_id, uint64_t start_time);
   void dequeue_committed_xcts(uint64_t up_to, uint64_t end_time);
-  int open_segment_for_read(segment_id * sid);
+  int open_segment_for_read(segment_id *sid);
 
   sm_log_recover_mgr _lm;
   window_buffer *_logbuf;

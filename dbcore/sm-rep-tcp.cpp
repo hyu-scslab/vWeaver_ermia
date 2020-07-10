@@ -1,25 +1,25 @@
 #include <sys/stat.h>
 
+#include "../ermia.h"
 #include "rcu.h"
 #include "sm-cmd-log.h"
 #include "sm-index.h"
 #include "sm-log-file.h"
 #include "sm-rep.h"
-#include "../ermia.h"
 
 namespace ermia {
 namespace rep {
 tcp::client_context* cctx CACHE_ALIGNED;
 uint64_t global_persisted_lsn_tcp CACHE_ALIGNED;
 
-void bring_up_backup_tcp(int backup_sockfd, backup_start_metadata *md) {
+void bring_up_backup_tcp(int backup_sockfd, backup_start_metadata* md) {
   auto sent_bytes = send(backup_sockfd, md, md->size(), 0);
   ALWAYS_ASSERT(sent_bytes == md->size());
 
   int chkpt_fd = -1;
   dirent_iterator dir(config::log_dir.c_str());
   int dfd = dir.dup();
-  for (char const *fname : dir) {
+  for (char const* fname : dir) {
     if (fname[0] == 'o') {
       chkpt_fd = os_openat(dfd, fname, O_RDONLY);
       break;
@@ -57,7 +57,7 @@ void primary_daemon_tcp() {
   // or all the logs if a chkpt doesn't exist.
   int chkpt_fd = -1;
   LSN chkpt_start_lsn = INVALID_LSN;
-  auto *md = prepare_start_metadata(chkpt_fd, chkpt_start_lsn);
+  auto* md = prepare_start_metadata(chkpt_fd, chkpt_start_lsn);
   os_close(chkpt_fd);
 
   std::vector<std::thread*> workers;
@@ -69,18 +69,19 @@ void primary_daemon_tcp() {
 
   // Fire workers to do the real job - must do this after got all backups
   // as we need to broadcast to everyone the complete list of all backup nodes
-  for (auto &fd : backup_sockfds) {
+  for (auto& fd : backup_sockfds) {
     workers.push_back(new std::thread(bring_up_backup_tcp, fd, md));
   }
 
-  for (auto &w : workers) {
+  for (auto& w : workers) {
     w->join();
     delete w;
   }
 
   // All done, start async shipping daemon if needed
   if (!config::command_log && config::persist_policy == config::kPersistAsync) {
-    primary_async_ship_daemon = std::move(std::thread(PrimaryAsyncShippingDaemon));
+    primary_async_ship_daemon =
+        std::move(std::thread(PrimaryAsyncShippingDaemon));
   }
 }
 
@@ -206,19 +207,21 @@ void start_as_backup_tcp() {
 // The caller (ie logmgr) handles it when necessary.
 void primary_ship_log_buffer_tcp(const char* buf, uint32_t size) {
   ASSERT(backup_sockfds.size());
-  for (int &fd : backup_sockfds) {
+  for (int& fd : backup_sockfds) {
     // Send real log data, size first
     ALWAYS_ASSERT(size);
     uint32_t nbytes = send(fd, (char*)&size, sizeof(uint32_t), 0);
-    LOG_IF(FATAL, nbytes != sizeof(uint32_t)) << "Incomplete log shipping (header)";
+    LOG_IF(FATAL, nbytes != sizeof(uint32_t))
+        << "Incomplete log shipping (header)";
     nbytes = send(fd, buf, size, 0);
-    LOG_IF(FATAL, nbytes != size) << "Incomplete log shipping: " << nbytes << "/"
-                                  << size;
+    LOG_IF(FATAL, nbytes != size)
+        << "Incomplete log shipping: " << nbytes << "/" << size;
 
     if (config::log_ship_offset_replay) {
       // Send redo partition boundary information - after sending real data
       // because we send data size=0 to indicate primary shutdown.
-      const uint32_t bounds_size = sizeof(uint64_t) * config::log_redo_partitions;
+      const uint32_t bounds_size =
+          sizeof(uint64_t) * config::log_redo_partitions;
       nbytes = send(fd, log_redo_partition_bounds, bounds_size, 0);
       LOG_IF(FATAL, nbytes != bounds_size) << "Error sending bounds array";
     }
@@ -228,8 +231,8 @@ void primary_ship_log_buffer_tcp(const char* buf, uint32_t size) {
 // Receives the bounds array sent from the primary.
 // The only caller is backup daemon.
 void BackupReceiveBoundsArrayTcp(ReplayPipelineStage& pipeline_stage) {
-    uint32_t bsize = config::log_redo_partitions * sizeof(uint64_t);
-    tcp::receive(cctx->server_sockfd, (char*)log_redo_partition_bounds, bsize);
+  uint32_t bsize = config::log_redo_partitions * sizeof(uint64_t);
+  tcp::receive(cctx->server_sockfd, (char*)log_redo_partition_bounds, bsize);
 
 #ifndef NDEBUG
   for (uint32_t i = 0; i < config::log_redo_partitions; ++i) {
@@ -247,8 +250,7 @@ void BackupReceiveBoundsArrayTcp(ReplayPipelineStage& pipeline_stage) {
   // one of the two global stages used by redo threads;
   // for background replay, however, it should be a temporary
   // one which will be later copied to the two global stages.
-  memcpy(pipeline_stage.log_redo_partition_bounds,
-         log_redo_partition_bounds,
+  memcpy(pipeline_stage.log_redo_partition_bounds, log_redo_partition_bounds,
          config::log_redo_partitions * sizeof(uint64_t));
   for (uint32_t i = 0; i < config::log_redo_partitions; ++i) {
     pipeline_stage.consumed[i] = false;
@@ -274,7 +276,7 @@ void BackupDaemonTcp() {
   tcp::send_ack(cctx->server_sockfd);
   received_log_size = 0;
   uint32_t recv_idx = 0;
-  ReplayPipelineStage *stage = nullptr;
+  ReplayPipelineStage* stage = nullptr;
   if (config::replay_policy == config::kReplayBackground) {
     stage = new ReplayPipelineStage;
   }
@@ -406,30 +408,38 @@ void BackupDaemonTcpCommandLog() {
     LOG_IF(FATAL, durable_offset != doff);
     uint64_t off = durable_offset % buf_size;
     LOG_IF(FATAL, durable_offset < CommandLog::replayed_offset)
-      << "Wrong durable/replayed offset: " << durable_offset << "/" << CommandLog::replayed_offset;
+        << "Wrong durable/replayed offset: " << durable_offset << "/"
+        << CommandLog::replayed_offset;
 
     if (config::replay_policy == config::kReplayPipelined) {
       // Wait for buffer space
-      while (volatile_read(CommandLog::next_replay_offset[idx]) > CommandLog::replayed_offset) {}
+      while (volatile_read(CommandLog::next_replay_offset[idx]) >
+             CommandLog::replayed_offset) {
+      }
     }
 
-    char *buf = CommandLog::cmd_log->GetBuffer() + off;
+    char* buf = CommandLog::cmd_log->GetBuffer() + off;
     tcp::receive(cctx->server_sockfd, buf, size);
 
-    DLOG(INFO) << "Received " << std::hex << durable_offset << "-" << size + durable_offset;
+    DLOG(INFO) << "Received " << std::hex << durable_offset << "-"
+               << size + durable_offset;
     if (config::replay_policy != config::kReplayBackground) {
-      volatile_write(CommandLog::next_replay_offset[idx], durable_offset + size);
+      volatile_write(CommandLog::next_replay_offset[idx],
+                     durable_offset + size);
     }
     idx = (idx + 1) % 2;
     CommandLog::cmd_log->BackupFlush(size + durable_offset);
     doff += size;
 
     if (config::replay_policy == config::kReplaySync) {
-      while (CommandLog::replayed_offset != durable_offset + size) {}
-      // Essentially this is a 'two-copy' database, so persist it (as if I'm primary)
+      while (CommandLog::replayed_offset != durable_offset + size) {
+      }
+      // Essentially this is a 'two-copy' database, so persist it (as if I'm
+      // primary)
       logmgr->flush();
       // Advance read view
-      volatile_write(replayed_lsn_offset, logmgr->durable_flushed_lsn().offset());
+      volatile_write(replayed_lsn_offset,
+                     logmgr->durable_flushed_lsn().offset());
     }
 
     // Ack the primary after persisting data

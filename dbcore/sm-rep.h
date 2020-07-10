@@ -10,18 +10,18 @@
 #include <sys/sendfile.h>
 
 #include <arpa/inet.h>
-#include <netinet/in.h>
 #include <netdb.h>
-#include <sys/types.h>
+#include <netinet/in.h>
 #include <sys/socket.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 #include <string>
 #include <thread>
 
+#include "../macros.h"
 #include "rdma.h"
 #include "tcp.h"
-#include "../macros.h"
 
 #include "sm-chkpt.h"
 #include "sm-config.h"
@@ -39,7 +39,7 @@ const uint64_t kRdmaWaiting = 0x1;
 const uint64_t kRdmaReadyToReceive = 0x2;
 const uint64_t kRdmaPersisted = 0x4;
 
-extern uint64_t *global_persisted_lsn_ptr;
+extern uint64_t* global_persisted_lsn_ptr;
 extern uint64_t replayed_lsn_offset;
 extern uint64_t persisted_nvram_size;
 extern uint64_t persisted_nvram_offset;
@@ -105,12 +105,13 @@ struct backup_start_metadata {
     system_config.log_segment_mb = config::log_segment_mb;
     system_config.offset_replay = config::log_ship_offset_replay;
     system_config.persist_policy = config::persist_policy;
-    system_config.command_log_buffer_mb = config::command_log ?
-                                          config::command_log_buffer_mb : 0;
+    system_config.command_log_buffer_mb =
+        config::command_log ? config::command_log_buffer_mb : 0;
   }
 
   inline void add_log_segment(unsigned int segment, uint64_t start_offset,
-                              uint64_t end_offset, uint64_t data_start, uint64_t size) {
+                              uint64_t end_offset, uint64_t data_start,
+                              uint64_t size) {
     // The filename; start_offset should already be adjusted according to
     // chkpt_start
     // so we only ship the part needed
@@ -182,15 +183,16 @@ struct ReplayPipelineStage {
   uint64_t log_redo_partition_bounds[kMaxLogBufferPartitions];
   std::atomic<bool> consumed[kMaxLogBufferPartitions];
   std::atomic<uint32_t> num_replaying_threads;
-  ReplayPipelineStage() : start_lsn(INVALID_LSN),
-                          end_lsn(INVALID_LSN),
-                          num_replaying_threads(0) {
-    memset(log_redo_partition_bounds, 0, sizeof(uint64_t) * kMaxLogBufferPartitions);
+  ReplayPipelineStage()
+      : start_lsn(INVALID_LSN), end_lsn(INVALID_LSN), num_replaying_threads(0) {
+    memset(log_redo_partition_bounds, 0,
+           sizeof(uint64_t) * kMaxLogBufferPartitions);
   }
 };
-extern ReplayPipelineStage *pipeline_stages;
+extern ReplayPipelineStage* pipeline_stages;
 
-void BackupProcessLogData(ReplayPipelineStage &stage, LSN start_lsn, LSN end_lsn);
+void BackupProcessLogData(ReplayPipelineStage& stage, LSN start_lsn,
+                          LSN end_lsn);
 void start_as_primary();
 void BackupStartReplication();
 void primary_ship_log_buffer_all(const char* buf, uint32_t size, bool new_seg,
@@ -200,7 +202,7 @@ backup_start_metadata* prepare_start_metadata(int& chkpt_fd,
 void PrimaryAsyncShippingDaemon();
 void PrimaryShutdown();
 void LogFlushDaemon();
-void TruncateFilesInLogDir(); 
+void TruncateFilesInLogDir();
 
 // RDMA-specific functions
 void BackupDaemonRdma();

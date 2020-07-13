@@ -1204,13 +1204,13 @@ rc_t transaction::si_commit() {
     Masstree::leaf<masstree_params> *next_leaf = nullptr;
     Masstree::leaf<masstree_params>::permuter_type next_perm;
     ConcurrentMasstree::versioned_node_t sinfo;
-    TXN::xid_context shortcut_xc;
+    TXN::xid_context k_ridgy_xc;
     oid_array *tuple_array;
-    fat_ptr shortcut_ptr;
+    fat_ptr k_ridgy_ptr;
     int next_ki = 0;
     bool found = true;
 
-    // [HYU] get next key for shortcut
+    // [HYU] get next key for k_ridgy
     if (w.next_key_info.leaf != nullptr) {
       info_oid =
           w.next_key_info.leaf->lv_[w.next_key_info.perm[w.next_key_info.ki]]
@@ -1239,18 +1239,18 @@ rc_t transaction::si_commit() {
       }
     }
 
-    /* install left shortcut to object->next */
+    /* install left k_ridgy to object->next */
     if (next_ki >= 0) {
       Object *obj = w.get_object();
       Object *next_obj = (Object *)obj->GetNextVolatile().offset();
       ASSERT(next_obj != nullptr);
-      memcpy(&shortcut_xc, xc, sizeof(TXN::xid_context));
-      shortcut_xc.begin = xc->end;
+      memcpy(&k_ridgy_xc, xc, sizeof(TXN::xid_context));
+      k_ridgy_xc.begin = xc->end;
       tuple_array = w.idx_desc->GetTupleArray();
-      shortcut_ptr = oidmgr->oid_get_version_zigzag_ptr(tuple_array, next_oid,
-                                                        &shortcut_xc);
+      k_ridgy_ptr = oidmgr->oid_get_version_zigzag_ptr(tuple_array, next_oid,
+                                                       &k_ridgy_xc);
 
-      next_obj->SetKRidgy(shortcut_ptr);
+      next_obj->SetKRidgy(k_ridgy_ptr);
     }
 #ifdef HYU_EVAL    /* HYU_EVAL */
     if (!chk) {

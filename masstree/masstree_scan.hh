@@ -330,11 +330,11 @@ int basic_table<P>::scan_zigzag(H helper, Str firstkey, bool emit_firstkey,
     case mystack_type::scan_emit: {  // surpress cross init warning about v
       ++scancount;
       ermia::dbtuple *v = NULL;
-      ermia::dbtuple *shortcut_v = NULL;
+      ermia::dbtuple *k_ridgy_v = NULL;
       ermia::dbtuple *chk_v = NULL;
       ermia::Object *obj = nullptr;
-      ermia::Object *shortcut_obj = nullptr;
-      ermia::fat_ptr shortcut_ptr = ermia::NULL_PTR;
+      ermia::Object *k_ridgy_obj = nullptr;
+      ermia::fat_ptr k_ridgy_ptr = ermia::NULL_PTR;
       ermia::OID zigzag_o = 0;
       ermia::OID chk_o = 0;
 
@@ -347,13 +347,13 @@ int basic_table<P>::scan_zigzag(H helper, Str firstkey, bool emit_firstkey,
       if (v) {
         if (!scanner.visit_value(ka, v)) goto done;
         obj = (ermia::Object *)v->GetObject();
-        shortcut_ptr = obj->GetKRidgy();
+        k_ridgy_ptr = obj->GetKRidgy();
       }
 
       // [HYU] zigzag move
-      while (pr && shortcut_ptr != ermia::NULL_PTR) {
-        shortcut_obj = (ermia::Object *)shortcut_ptr.offset();
-        if (shortcut_obj->rec_id == 0)  // is deleted
+      while (pr && k_ridgy_ptr != ermia::NULL_PTR) {
+        k_ridgy_obj = (ermia::Object *)k_ridgy_ptr.offset();
+        if (k_ridgy_obj->rec_id == 0)  // is deleted
           break;
 
         ++scancount;
@@ -364,10 +364,10 @@ int basic_table<P>::scan_zigzag(H helper, Str firstkey, bool emit_firstkey,
         // printf("before ki: %d, before leaf: %p, state:%d\n",
         // stack[stackpos].ki_, stack[stackpos].n_, state);
 
-        shortcut_v =
-            ermia::oidmgr->oid_get_version_zigzag_from_ver(shortcut_ptr, xc);
+        k_ridgy_v =
+            ermia::oidmgr->oid_get_version_zigzag_from_ver(k_ridgy_ptr, xc);
 
-        if (shortcut_v && !scanner.visit_value(ka, shortcut_v)) goto done;
+        if (k_ridgy_v && !scanner.visit_value(ka, k_ridgy_v)) goto done;
 
       chk_again:
         while (1) {
@@ -402,9 +402,9 @@ int basic_table<P>::scan_zigzag(H helper, Str firstkey, bool emit_firstkey,
         }
       keep_going:
 
-        if (shortcut_v) {
-          shortcut_obj = (ermia::Object *)shortcut_v->GetObject();
-          zigzag_o = shortcut_obj->rec_id;
+        if (k_ridgy_v) {
+          k_ridgy_obj = (ermia::Object *)k_ridgy_v->GetObject();
+          zigzag_o = k_ridgy_obj->rec_id;
           chk_o = entry.value();
           if (zigzag_o != chk_o) {
             // chk_v = ermia::oidmgr->oid_get_version_zigzag(tuple_array_,
@@ -416,11 +416,11 @@ int basic_table<P>::scan_zigzag(H helper, Str firstkey, bool emit_firstkey,
           }
           ASSERT(zigzag_o == chk_o);
 
-          obj = (ermia::Object *)shortcut_v->GetObject();
-          shortcut_ptr = obj->GetKRidgy();
+          obj = (ermia::Object *)k_ridgy_v->GetObject();
+          k_ridgy_ptr = obj->GetKRidgy();
         } else {
-          obj = shortcut_obj;
-          shortcut_ptr = obj->GetKRidgy();
+          obj = k_ridgy_obj;
+          k_ridgy_ptr = obj->GetKRidgy();
         }
       }
 

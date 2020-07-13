@@ -51,7 +51,7 @@ class Object {
     // copy of v_ridgy version's clsn
     fat_ptr v_ridgy_clsn_;
 
-    // next-key shortcut for VWEAVER
+    // k_ridgy pointer for VWEAVER
     fat_ptr k_ridgy_;
 
     // level of version
@@ -137,9 +137,7 @@ class Object {
     return volatile_read(vweaver_.v_ridgy_clsn_);
   }
   inline fat_ptr GetVRidgy() { return volatile_read(vweaver_.v_ridgy_); }
-  inline fat_ptr GetKRidgy() {
-    return volatile_read(vweaver_.k_ridgy_);
-  }
+  inline fat_ptr GetKRidgy() { return volatile_read(vweaver_.k_ridgy_); }
   inline void SetVRidgyClsn(fat_ptr clsn) {
     volatile_write(vweaver_.v_ridgy_clsn_, clsn);
   }

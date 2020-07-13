@@ -43,20 +43,32 @@ class Object {
   fat_ptr clsn_;
 
 #ifdef HYU_VWEAVER /* HYU_VWEAVER */
-  // highway pointer in version chain
-  fat_ptr highway_;
+  class VWeaver {
+   public:
+    // v_ridgy pointer in version chain
+    fat_ptr v_ridgy_;
 
-  // copy of highway version's clsn
-  fat_ptr highway_clsn_;
+    // copy of v_ridgy version's clsn
+    fat_ptr v_ridgy_clsn_;
 
-  // next-key shortcut for VWEAVER
-  fat_ptr left_shortcut_;
+    // next-key shortcut for VWEAVER
+    fat_ptr left_shortcut_;
 
-  // level of version
-  uint8_t lv_;
+    // level of version
+    uint8_t lv_;
 
-  // level of highway version
-  uint8_t highway_lv_;
+    // level of v_ridgy version
+    uint8_t v_ridgy_lv_;
+
+    VWeaver()
+        : v_ridgy_(NULL_PTR),
+          v_ridgy_clsn_(NULL_PTR),
+          left_shortcut_(NULL_PTR),
+          lv_(1),
+          v_ridgy_lv_(0) {}
+  };
+
+  VWeaver vweaver_;
 #endif /* HYU_VWEAVER */
 
  public:
@@ -69,16 +81,7 @@ class Object {
         pdest_(NULL_PTR),
         next_pdest_(NULL_PTR),
         next_volatile_(NULL_PTR),
-        clsn_(NULL_PTR),
-#ifdef HYU_VWEAVER /* HYU_VWEAVER */
-        highway_(NULL_PTR),
-        highway_clsn_(NULL_PTR),
-        left_shortcut_(NULL_PTR),
-        lv_(1),
-        highway_lv_(0),
-#endif /* HYU_VWEAVER */
-        HYU_gc_candidate_clsn_(0) {
-  }
+        clsn_(NULL_PTR) {}
 
   Object(fat_ptr pdest, fat_ptr next, epoch_num e, bool in_memory)
       : alloc_epoch_(e),
@@ -86,16 +89,7 @@ class Object {
         pdest_(pdest),
         next_pdest_(next),
         next_volatile_(NULL_PTR),
-        clsn_(NULL_PTR),
-#ifdef HYU_VWEAVER /* HYU_VWEAVER */
-        highway_(NULL_PTR),
-        highway_clsn_(NULL_PTR),
-        left_shortcut_(NULL_PTR),
-        lv_(1),
-        highway_lv_(0),
-#endif /* HYU_VWEAVER */
-        HYU_gc_candidate_clsn_(0) {
-  }
+        clsn_(NULL_PTR) {}
 
   inline bool IsDeleted() { return status_ == kStatusDeleted; }
   inline bool IsInMemory() { return status_ == kStatusMemory; }
@@ -126,6 +120,7 @@ class Object {
     }
     return (dbtuple*)GetPayload();
   }
+
 #ifdef HYU_VWEAVER /* HYU_VWEAVER */
   inline int TossCoin(uint64_t* seed) {
     *seed ^= *seed >> 12;
@@ -134,29 +129,34 @@ class Object {
 
     return (*seed * 2685821657736338717ULL) % 2;
   }
-  inline uint8_t GetLevel() { return lv_; }
-  inline void SetLevel(uint8_t level) { lv_ = level; }
-  inline uint8_t GetHighwayLevel() { return highway_lv_; }
-  inline void SetHighwayLevel(uint8_t level) { highway_lv_ = level; }
-  inline fat_ptr GetHighwayClsn() { return volatile_read(highway_clsn_); }
-  inline fat_ptr GetHighway() { return volatile_read(highway_); }
-  inline fat_ptr GetLeftShortcut() { return volatile_read(left_shortcut_); }
-  inline void SetHighwayClsn(fat_ptr clsn) {
-    volatile_write(highway_clsn_, clsn);
+  inline uint8_t GetLevel() { return vweaver_.lv_; }
+  inline void SetLevel(uint8_t level) { vweaver_.lv_ = level; }
+  inline uint8_t GetVRidgyLevel() { return vweaver_.v_ridgy_lv_; }
+  inline void SetVRidgyLevel(uint8_t level) { vweaver_.v_ridgy_lv_ = level; }
+  inline fat_ptr GetVRidgyClsn() {
+    return volatile_read(vweaver_.v_ridgy_clsn_);
   }
-  inline void SetHighway(fat_ptr highway) { volatile_write(highway_, highway); }
+  inline fat_ptr GetVRidgy() { return volatile_read(vweaver_.v_ridgy_); }
+  inline fat_ptr GetLeftShortcut() {
+    return volatile_read(vweaver_.left_shortcut_);
+  }
+  inline void SetVRidgyClsn(fat_ptr clsn) {
+    volatile_write(vweaver_.v_ridgy_clsn_, clsn);
+  }
+  inline void SetVRidgy(fat_ptr v_ridgy) {
+    volatile_write(vweaver_.v_ridgy_, v_ridgy);
+  }
   inline void SetLeftShortcut(fat_ptr left) {
-    volatile_write(left_shortcut_, left);
+    volatile_write(vweaver_.left_shortcut_, left);
   }
 #endif /* HYU_VWEAVER */
   fat_ptr GenerateClsnPtr(uint64_t clsn);
   void Pin(
       bool load_from_logbuf = false);  // Make sure the payload is in memory
 
-  // HYU_GC
-  uint64_t HYU_gc_candidate_clsn_;
 #ifdef HYU_VWEAVER /* HYU_VWEAVER */
   OID rec_id;
 #endif /* HYU_VWEAVER */
 };
+
 }  // namespace ermia

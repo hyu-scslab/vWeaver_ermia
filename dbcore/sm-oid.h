@@ -170,7 +170,7 @@ struct sm_oid_mgr {
   void oid_put_new(FID f, OID o, fat_ptr p);
   void oid_put_new_if_absent(FID f, OID o, fat_ptr p);
 #ifdef HYU_VWEAVER /* HYU_VWEAVER */
-  bool SubmitHighwayChain(Object *new_obj, fat_ptr old_ptr);
+  bool SubmitVRidgyChain(Object *new_obj, fat_ptr old_ptr);
 #endif /* HYU_VWEAVER */
 
   /* Return a fat_ptr to the overwritten object (could be an in-flight version!)

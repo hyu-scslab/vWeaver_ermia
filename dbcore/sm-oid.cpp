@@ -673,7 +673,7 @@ void sm_oid_mgr::oid_put_new_if_absent(FID f, OID o, fat_ptr p) {
 
 #ifdef HYU_VWEAVER /* HYU_VWEAVER */
 /* bool @out 	true if success to submit highway chain */
-bool sm_oid_mgr::SubmitHighwayChain(Object *new_obj, fat_ptr old_ptr) {
+bool sm_oid_mgr::SubmitVRidgyChain(Object *new_obj, fat_ptr old_ptr) {
   fat_ptr next_ptr = volatile_read(old_ptr);
   Object *new_object = new_obj;
   Object *next = (Object *)next_ptr.offset();
@@ -691,9 +691,9 @@ bool sm_oid_mgr::SubmitHighwayChain(Object *new_obj, fat_ptr old_ptr) {
 
     ASSERT(next->GetClsn().asi_type() == fat_ptr::ASI_LOG);
 
-    new_object->SetHighway(next_ptr);
-    new_object->SetHighwayClsn(next->GetClsn());
-    new_object->SetHighwayLevel(next->GetLevel());
+    new_object->SetVRidgy(next_ptr);
+    new_object->SetVRidgyClsn(next->GetClsn());
+    new_object->SetVRidgyLevel(next->GetLevel());
 
     return true;
   }
@@ -702,17 +702,17 @@ bool sm_oid_mgr::SubmitHighwayChain(Object *new_obj, fat_ptr old_ptr) {
   // traversing next's v_ridgy. If a version's level is same or bigger than my
   // level, connecting v_ridgy.
   while (1) {
-    hw_level = (uint64_t)next->GetHighwayLevel();
+    hw_level = (uint64_t)next->GetVRidgyLevel();
 
     if (hw_level >= my_level) {
-      clsn = next->GetHighwayClsn();
+      clsn = next->GetVRidgyClsn();
 
       if (clsn.asi_type() != fat_ptr::ASI_LOG ||
           watermark > LSN::from_ptr(clsn).offset())
         return false;
 
       // if new version try to set highway with GCed object, stop
-      Object *highway = (Object *)(next->GetHighway().offset());
+      Object *highway = (Object *)(next->GetVRidgy().offset());
       if (highway->GetClsn()._ptr == 0 ||
           highway->GetClsn().asi_type() != fat_ptr::ASI_LOG ||
           LSN::from_ptr(highway->GetClsn()).offset() !=
@@ -722,27 +722,27 @@ bool sm_oid_mgr::SubmitHighwayChain(Object *new_obj, fat_ptr old_ptr) {
 
       if ((uint64_t)highway->GetLevel() < my_level) return false;
 
-      new_object->SetHighway(next->GetHighway());
-      new_object->SetHighwayClsn(highway->GetClsn());
-      new_object->SetHighwayLevel(highway->GetLevel());
-      // new_object->SetHighwayClsn(next->GetHighwayClsn());
-      // new_object->SetHighwayLevel(next->GetHighwayLevel());
+      new_object->SetVRidgy(next->GetVRidgy());
+      new_object->SetVRidgyClsn(highway->GetClsn());
+      new_object->SetVRidgyLevel(highway->GetLevel());
+      // new_object->SetVRidgyClsn(next->GetVRidgyClsn());
+      // new_object->SetVRidgyLevel(next->GetVRidgyLevel());
       return true;
     } else {
-      next_ptr = next->GetHighway();
+      next_ptr = next->GetVRidgy();
       if (next_ptr == NULL_PTR) break;
 
-      Object *highway = (Object *)(next->GetHighway().offset());
+      Object *highway = (Object *)(next->GetVRidgy().offset());
       if (highway->GetClsn() == NULL_PTR ||
           highway->GetClsn().asi_type() != fat_ptr::ASI_LOG ||
           LSN::from_ptr(highway->GetClsn()).offset() !=
-              LSN::from_ptr(next->GetHighwayClsn()).offset()) {
+              LSN::from_ptr(next->GetVRidgyClsn()).offset()) {
         return false;
       }
 
       next = (Object *)next_ptr.offset();
 
-      uint64_t hwlv = (uint64_t)next->GetHighwayLevel();
+      uint64_t hwlv = (uint64_t)next->GetVRidgyLevel();
       if (hwlv < hw_level) break;
     }
   }
@@ -857,10 +857,10 @@ install:
     new_object->SetNextPersistent(old_desc->GetNextPersistent());
     new_object->SetNextVolatile(old_desc->GetNextVolatile());
 #ifdef HYU_VWEAVER /* HYU_VWEAVER */
-    new_object->SetHighway(old_desc->GetHighway());
-    new_object->SetHighwayClsn(old_desc->GetHighwayClsn());
+    new_object->SetVRidgy(old_desc->GetVRidgy());
+    new_object->SetVRidgyClsn(old_desc->GetVRidgyClsn());
     new_object->SetLevel(old_desc->GetLevel());
-    new_object->SetHighwayLevel(old_desc->GetHighwayLevel());
+    new_object->SetVRidgyLevel(old_desc->GetVRidgyLevel());
     new_object->rec_id = old_desc->rec_id;
 #endif /* HYU_VWEAVER */
     // I already claimed it, no need to use cas then
@@ -901,7 +901,7 @@ install:
       new_object->SetLevel(lv);
     }
 
-    bool submit = SubmitHighwayChain(new_object, head);
+    bool submit = SubmitVRidgyChain(new_object, head);
     new_object->rec_id = o;
     __sync_synchronize();
 #endif /* HYU_VWEAVER */
@@ -1313,7 +1313,7 @@ start_over:
       ASSERT(ptr.asi_type() == 0);
       cur_obj = (Object *)ptr.offset();
       tentative_next = cur_obj->GetNextVolatile();
-      tentative_highway = cur_obj->GetHighway();
+      tentative_highway = cur_obj->GetVRidgy();
       ASSERT(tentative_next.asi_type() == 0);
       ASSERT(tentative_highway.asi_type() == 0);
       // cur_level = cur_obj->GetLevel();
@@ -1479,7 +1479,7 @@ start_over:
       ASSERT(ptr.asi_type() == 0);
       cur_obj = (Object *)ptr.offset();
       tentative_next = cur_obj->GetNextVolatile();
-      tentative_highway = cur_obj->GetHighway();
+      tentative_highway = cur_obj->GetVRidgy();
       ASSERT(tentative_next.asi_type() == 0);
       ASSERT(tentative_highway.asi_type() == 0);
     }
@@ -1586,7 +1586,7 @@ start_over:
       ASSERT(ptr.asi_type() == 0);
       cur_obj = (Object *)ptr.offset();
       tentative_next = cur_obj->GetNextVolatile();
-      tentative_highway = cur_obj->GetHighway();
+      tentative_highway = cur_obj->GetVRidgy();
       ASSERT(tentative_next.asi_type() == 0);
       ASSERT(tentative_highway.asi_type() == 0);
     }
@@ -1672,7 +1672,7 @@ start_over:
       ASSERT(ptr.asi_type() == 0);
       cur_obj = (Object *)ptr.offset();
       tentative_next = cur_obj->GetNextVolatile();
-      tentative_highway = cur_obj->GetHighway();
+      tentative_highway = cur_obj->GetVRidgy();
       ASSERT(tentative_next.asi_type() == 0);
       ASSERT(tentative_highway.asi_type() == 0);
     }
@@ -1757,7 +1757,7 @@ start_over:
       ASSERT(ptr.asi_type() == 0);
       cur_obj = (Object *)ptr.offset();
       tentative_next = cur_obj->GetNextVolatile();
-      tentative_highway = cur_obj->GetHighway();
+      tentative_highway = cur_obj->GetVRidgy();
       ASSERT(tentative_next.asi_type() == 0);
       ASSERT(tentative_highway.asi_type() == 0);
     }

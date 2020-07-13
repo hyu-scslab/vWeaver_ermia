@@ -128,11 +128,11 @@ fat_ptr Object::Create(const varstr *tuple_value, bool do_write,
   ASSERT(obj->GetAllocateEpoch() <= epoch - 4);
   obj->SetAllocateEpoch(epoch);
 #ifdef HYU_VWEAVER /* HYU_VWEAVER */
-  obj->SetHighway(NULL_PTR);
-  obj->SetHighwayClsn(NULL_PTR);
+  obj->SetVRidgy(NULL_PTR);
+  obj->SetVRidgyClsn(NULL_PTR);
   obj->SetLeftShortcut(NULL_PTR);
   obj->SetLevel(1);
-  obj->SetHighwayLevel(0);
+  obj->SetVRidgyLevel(0);
 #endif /* HYU_VWEAVER */
 
   // Tuple setup

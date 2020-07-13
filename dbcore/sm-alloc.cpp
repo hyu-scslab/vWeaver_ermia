@@ -142,11 +142,11 @@ void gc_version_chain(fat_ptr *oid_entry) {
         fat_ptr next_ptr = cur_obj->GetNextVolatile();
         cur_obj->SetClsn(NULL_PTR);
         cur_obj->SetNextVolatile(NULL_PTR);
-        cur_obj->SetHighway(NULL_PTR);
-        cur_obj->SetHighwayClsn(NULL_PTR);
+        cur_obj->SetVRidgy(NULL_PTR);
+        cur_obj->SetVRidgyClsn(NULL_PTR);
         cur_obj->SetLeftShortcut(NULL_PTR);
         cur_obj->SetLevel(1);
-        cur_obj->SetHighwayLevel(0);
+        cur_obj->SetVRidgyLevel(0);
         cur_obj->rec_id = 0;
         if (!tls_free_object_pool) {
           tls_free_object_pool = new TlsFreeObjectPool;
@@ -308,11 +308,11 @@ void deallocate(fat_ptr p) {
   obj->SetNextVolatile(NULL_PTR);
   obj->SetClsn(NULL_PTR);
 #ifdef HYU_VWEAVER /* HYU_VWEAVER */
-  obj->SetHighway(NULL_PTR);
-  obj->SetHighwayClsn(NULL_PTR);
+  obj->SetVRidgy(NULL_PTR);
+  obj->SetVRidgyClsn(NULL_PTR);
   obj->SetLeftShortcut(NULL_PTR);
   obj->SetLevel(1);
-  obj->SetHighwayLevel(0);
+  obj->SetVRidgyLevel(0);
   obj->rec_id = 0;
 #endif /* HYU_VWEAVER */
   if (!tls_free_object_pool) {

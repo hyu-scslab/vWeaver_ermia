@@ -2,8 +2,8 @@
 
 #include <map>
 
-#include "../dbcore/sm-log-recover-impl.h"
 #include "txn.h"
+#include "../dbcore/sm-log-recover-impl.h"
 
 namespace ermia {
 class Engine {

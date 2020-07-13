@@ -45,7 +45,7 @@ transaction::transaction(uint64_t flags, str_arena &sa)
     initialize_read_write();
   }
 #ifdef HYU_EVAL /* HYU_EVAL */
-  fp = fopen("ermia_update_cost.data", "w+");
+  //fp = fopen("ermia_update_cost.data", "w+");
   start_time = 0;
   update_cost = 0;
   vridgy_cost = 0;
@@ -190,7 +190,7 @@ void transaction::Abort() {
   }
 
 #ifdef HYU_EVAL /* HYU_EVAL */
-  fclose(fp);
+  //fclose(fp);
 #endif /* HYU_EVAL */
 
   // Read-only tx on a safesnap won't have log
@@ -1336,16 +1336,18 @@ rc_t transaction::si_commit() {
     v_c = (double)z * (v_dev / sqrt(v.size()));
     k_c = (double)z * (k_dev / sqrt(k.size()));
 
+    fp = fopen("ermia_update_cost.data", "w+");
+
     fprintf(fp,
             "2, 4, 6, %3.lf, %.3lf, %.3lf, %.3lf, %.3lf, %.3lf, %.3lf, %.3lf, "
             "%.3lf\n",
             upd_total_portion, upd_mean, upd_c, v_total_portion, v_mean, v_c,
             k_total_portion, k_mean, k_c);
     fflush(fp);
-    // fclose(fp);
+    fclose(fp);
   }
 #endif             /* HYU_VWEAVER */
-  fclose(fp);
+  //fclose(fp);
 #endif             /* HYU_EVAL */
 
   return rc_t{RC_TRUE};

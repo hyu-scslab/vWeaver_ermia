@@ -52,7 +52,7 @@ class Object {
     fat_ptr v_ridgy_clsn_;
 
     // next-key shortcut for VWEAVER
-    fat_ptr left_shortcut_;
+    fat_ptr k_ridgy_;
 
     // level of version
     uint8_t lv_;
@@ -63,7 +63,7 @@ class Object {
     VWeaver()
         : v_ridgy_(NULL_PTR),
           v_ridgy_clsn_(NULL_PTR),
-          left_shortcut_(NULL_PTR),
+          k_ridgy_(NULL_PTR),
           lv_(1),
           v_ridgy_lv_(0) {}
   };
@@ -137,8 +137,8 @@ class Object {
     return volatile_read(vweaver_.v_ridgy_clsn_);
   }
   inline fat_ptr GetVRidgy() { return volatile_read(vweaver_.v_ridgy_); }
-  inline fat_ptr GetLeftShortcut() {
-    return volatile_read(vweaver_.left_shortcut_);
+  inline fat_ptr GetKRidgy() {
+    return volatile_read(vweaver_.k_ridgy_);
   }
   inline void SetVRidgyClsn(fat_ptr clsn) {
     volatile_write(vweaver_.v_ridgy_clsn_, clsn);
@@ -146,8 +146,8 @@ class Object {
   inline void SetVRidgy(fat_ptr v_ridgy) {
     volatile_write(vweaver_.v_ridgy_, v_ridgy);
   }
-  inline void SetLeftShortcut(fat_ptr left) {
-    volatile_write(vweaver_.left_shortcut_, left);
+  inline void SetKRidgy(fat_ptr k_ridgy) {
+    volatile_write(vweaver_.k_ridgy_, k_ridgy);
   }
 #endif /* HYU_VWEAVER */
   fat_ptr GenerateClsnPtr(uint64_t clsn);

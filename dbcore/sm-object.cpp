@@ -130,7 +130,7 @@ fat_ptr Object::Create(const varstr *tuple_value, bool do_write,
 #ifdef HYU_VWEAVER /* HYU_VWEAVER */
   obj->SetVRidgy(NULL_PTR);
   obj->SetVRidgyClsn(NULL_PTR);
-  obj->SetLeftShortcut(NULL_PTR);
+  obj->SetKRidgy(NULL_PTR);
   obj->SetLevel(1);
   obj->SetVRidgyLevel(0);
 #endif /* HYU_VWEAVER */

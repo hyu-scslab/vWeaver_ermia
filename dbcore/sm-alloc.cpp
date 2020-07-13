@@ -144,7 +144,7 @@ void gc_version_chain(fat_ptr *oid_entry) {
         cur_obj->SetNextVolatile(NULL_PTR);
         cur_obj->SetVRidgy(NULL_PTR);
         cur_obj->SetVRidgyClsn(NULL_PTR);
-        cur_obj->SetLeftShortcut(NULL_PTR);
+        cur_obj->SetKRidgy(NULL_PTR);
         cur_obj->SetLevel(1);
         cur_obj->SetVRidgyLevel(0);
         cur_obj->rec_id = 0;
@@ -310,7 +310,7 @@ void deallocate(fat_ptr p) {
 #ifdef HYU_VWEAVER /* HYU_VWEAVER */
   obj->SetVRidgy(NULL_PTR);
   obj->SetVRidgyClsn(NULL_PTR);
-  obj->SetLeftShortcut(NULL_PTR);
+  obj->SetKRidgy(NULL_PTR);
   obj->SetLevel(1);
   obj->SetVRidgyLevel(0);
   obj->rec_id = 0;

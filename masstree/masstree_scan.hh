@@ -347,7 +347,7 @@ int basic_table<P>::scan_zigzag(H helper, Str firstkey, bool emit_firstkey,
       if (v) {
         if (!scanner.visit_value(ka, v)) goto done;
         obj = (ermia::Object *)v->GetObject();
-        shortcut_ptr = obj->GetLeftShortcut();
+        shortcut_ptr = obj->GetKRidgy();
       }
 
       // [HYU] zigzag move
@@ -417,10 +417,10 @@ int basic_table<P>::scan_zigzag(H helper, Str firstkey, bool emit_firstkey,
           ASSERT(zigzag_o == chk_o);
 
           obj = (ermia::Object *)shortcut_v->GetObject();
-          shortcut_ptr = obj->GetLeftShortcut();
+          shortcut_ptr = obj->GetKRidgy();
         } else {
           obj = shortcut_obj;
-          shortcut_ptr = obj->GetLeftShortcut();
+          shortcut_ptr = obj->GetKRidgy();
         }
       }
 

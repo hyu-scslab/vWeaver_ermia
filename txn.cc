@@ -1250,7 +1250,7 @@ rc_t transaction::si_commit() {
       shortcut_ptr = oidmgr->oid_get_version_zigzag_ptr(tuple_array, next_oid,
                                                         &shortcut_xc);
 
-      next_obj->SetLeftShortcut(shortcut_ptr);
+      next_obj->SetKRidgy(shortcut_ptr);
     }
 #ifdef HYU_EVAL    /* HYU_EVAL */
     if (!chk) {

@@ -54,6 +54,7 @@ static int g_nr_suppliers = 10000;    // default is 10000
 #ifdef HYU_EVAL_2                     /* HYU_EVAL_2 */
 bool first = false;
 uint64_t first_begin = 0;
+uint64_t proceed = 0;
 #endif /* HYU_EVAL_2 */
 
 // how much % of time a worker should use a random home wh
@@ -1664,7 +1665,6 @@ uint64_t zipfian(double alpha, uint64_t n) {
 rc_t tpcc_worker::txn_delivery() {
   uint64_t count = 0;
   static int64_t uniform_seed = pthread_self();
-  static uint64_t proceed = 0;
   static uint64_t zipf_count[10001];
   static uint64_t zipf_mid_count[10001];
   static uint64_t uniform_count[10001];
@@ -2309,8 +2309,14 @@ rc_t tpcc_worker::txn_payment() {
   FILE *fp_vridgy_high_skew = fopen("vridgy_high_skew_latency.data", "w+");
   FILE *fp_vweaver_uniform = fopen("vweaver_uniform_latency.data", "w+");
   FILE *fp_vweaver_mid_skew = fopen("vweaver_mid_skew_latency.data", "w+");
-#endif /* HYU_LONG_CHAIN */
   FILE *fp_vweaver_high_skew = fopen("vweaver_high_skew_latency.data", "w+");
+#else /* HYU_LONG_CHAIN */
+  FILE *fp_vweaver_high_skew;
+  if (proceed == 50000)
+    fp_vweaver_high_skew = fopen("vweaver_short_chain_latency.data", "w+");
+  else
+    fp_vweaver_high_skew = fopen("vweaver_long_chain_latency.data", "w+");
+#endif /* HYU_LONG_CHAIN */
 
   for (int i = TIME_PARTITION - 1; i >= 0; i--) {
     for (int j = 0; j < RANGE_PARTITION; j++) {
@@ -2341,11 +2347,15 @@ rc_t tpcc_worker::txn_payment() {
       fprintf(fp_vridgy_high_skew, "%d, %d, %lf\n", 10 - i, j + 1,
               vridgy_high_skew[i][j]);
       fflush(fp_vridgy_high_skew);
-
-#endif /* HYU_LONG_CHAIN */
       fprintf(fp_vweaver_high_skew, "%d, %d, %lf\n", 10 - i, j + 1,
               vweaver_high_skew[i][j]);
       fflush(fp_vweaver_high_skew);
+
+#else /* HYU_LONG_CHAIN */
+      fprintf(fp_vweaver_high_skew, "%d, %d, %lf\n", 10 - i, j + 1,
+              vweaver_high_skew[i][j]);
+      fflush(fp_vweaver_high_skew);
+#endif /* HYU_LONG_CHAIN */
     }
 #ifndef HYU_LONG_CHAIN /* HYU_LONG_CHAIN */
     fprintf(fp_vanilla_uniform, "\n");
@@ -2366,9 +2376,12 @@ rc_t tpcc_worker::txn_payment() {
     fflush(fp_vanilla_high_skew);
     fprintf(fp_vridgy_high_skew, "\n");
     fflush(fp_vridgy_high_skew);
-#endif /* HYU_LONG_CHAIN */
     fprintf(fp_vweaver_high_skew, "\n");
     fflush(fp_vweaver_high_skew);
+#else /* HYU_LONG_CHAIN */
+    fprintf(fp_vweaver_high_skew, "\n");
+    fflush(fp_vweaver_high_skew);
+#endif /* HYU_LONG_CHAIN */
   }
 #ifndef HYU_LONG_CHAIN /* HYU_LONG_CHAIN */
   fclose(fp_vanilla_uniform);
@@ -2379,8 +2392,10 @@ rc_t tpcc_worker::txn_payment() {
   fclose(fp_vweaver_mid_skew);
   fclose(fp_vanilla_high_skew);
   fclose(fp_vridgy_high_skew);
-#endif /* HYU_LONG_CHAIN */
   fclose(fp_vweaver_high_skew);
+#else /* HYU_LONG_CHAIN */
+  fclose(fp_vweaver_high_skew);
+#endif /* HYU_LONG_CHAIN */
 
   TryCatch(db->Commit(txn));
   printf("latency breakdown evaluation end\n");

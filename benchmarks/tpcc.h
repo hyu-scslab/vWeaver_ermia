@@ -4,7 +4,7 @@
 #include "record/encoder.h"
 #include "record/inline_str.h"
 
-#ifdef HYU_EVAL_2 /* HYU_EVAL_2 */
+#if defined(HYU_EVAL_2) || defined(HYU_EVAL_OBJ) /* HYU_EVAL_2 */
 #define SCAN_VANILLA 0
 #define SCAN_VRIDGY 1
 #define SCAN_VWEAVER 2

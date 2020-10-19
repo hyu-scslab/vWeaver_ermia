@@ -23,9 +23,9 @@
 
 namespace ermia {
 sm_oid_mgr *oidmgr = NULL;
-#ifdef HYU_VWEAVER /* HYU_VWEAVER */
+#if defined(HYU_VWEAVER) || defined(HYU_SKIPLIST) /* HYU_VWEAVER || HYU_SKIPLIST */
 thread_local uint64_t seed;
-#endif /* HYU_VWEAVER */
+#endif /* HYU_VWEAVER || HYU_SKIPLIST */
 
 struct thread_data {
   static size_t const NENTRIES = 4096;
@@ -124,9 +124,9 @@ void thread_init() {
   THROW_IF(err, os_error, errno, "pthread_setspecific failed");
   success = true;
 
-#ifdef HYU_VWEAVER /* HYU_VWEAVER */
+#if defined(HYU_VWEAVER) || defined(HYU_SKIPLIST) /* HYU_VWEAVER || HYU_SKIPLIST */
   seed = (uint64_t)tid;
-#endif /* HYU_VWEAVER */
+#endif /* HYU_VWEAVER || HYU_SKIPLIST */
 
   tls = tmp;
 }
@@ -750,6 +750,37 @@ bool sm_oid_mgr::SubmitVRidgyChain(Object *new_obj, fat_ptr old_ptr) {
 }
 #endif /* HYU_VWEAVER */
 
+#ifdef HYU_SKIPLIST /* HYU_SKIPLIST */
+void sm_oid_mgr::SentinelOverwrite(fat_ptr new_obj) {
+  Object *new_object = (Object *)new_obj.offset();
+  uint8_t level = new_object->GetLv();
+  fat_ptr *sentinel_node = (fat_ptr *)new_object->GetSentinel().offset();
+
+  for (int i = 1; i <= level; i++) {
+    sentinel_node[i] = new_obj;
+  }
+}
+/* bool @out 	true if success to submit skip list chain */
+bool sm_oid_mgr::SubmitSkipListChain(fat_ptr new_obj) {
+  Object *new_object = (Object *)new_obj.offset();
+  uint8_t level = new_object->GetLv();
+  fat_ptr lv_ptr = new_object->GetLvPointer();
+  fat_ptr temp_ptr;
+  fat_ptr *sentinel_node = (fat_ptr *)new_object->GetSentinel().offset();
+  fat_ptr *lv_array = (fat_ptr *)lv_ptr.offset();
+  uint64_t watermark = volatile_read(MM::gc_lsn);
+
+  for (int i = 1; i <= level; i++) {
+    temp_ptr = volatile_read(sentinel_node[i]);
+    sentinel_node[i] = new_obj;
+    lv_array[i] = temp_ptr;
+  }
+
+  return true;
+}
+
+#endif /* HYU_SKIPLIST */
+
 fat_ptr sm_oid_mgr::PrimaryTupleUpdate(FID f, OID o, const varstr *value,
                                        TXN::xid_context *updater_xc,
                                        fat_ptr *new_obj_ptr) {
@@ -766,6 +797,7 @@ fat_ptr sm_oid_mgr::PrimaryTupleUpdate(oid_array *oa, OID o,
   ASSERT(!config::is_backup_srv() ||
          (config::command_log && config::replay_threads));
   auto *ptr = oa->get(o);
+
 start_over:
   fat_ptr head = volatile_read(*ptr);
   ASSERT(head.asi_type() == 0);
@@ -850,8 +882,46 @@ install:
   ASSERT(new_obj_ptr->asi_type() == 0);
   Object *new_object = (Object *)new_obj_ptr->offset();
   new_object->SetClsn(updater_xc->owner.to_ptr());
+
+#ifdef HYU_SKIPLIST /* HYU_SKIPLIST */
+  if (old_desc->GetSentinel() == NULL_PTR) {
+    // make sentinel
+    size_t size = sizeof(fat_ptr) * SKIPLIST_MAX_LEVEL;
+    fat_ptr *sentinel_ptr = (fat_ptr *)MM::allocate(size);
+    memset(sentinel_ptr, 0, size);
+    size_t size_code = encode_size_aligned(size);
+    ASSERT(size_code != INVALID_SIZE_CODE);
+    fat_ptr sentinel = fat_ptr::make(sentinel_ptr, size_code, 0);
+
+    old_desc->SetSentinel(sentinel);
+
+    // Decide level
+    uint8_t lv = 1;
+    while (1) {
+      int go_up = old_desc->TossCoin2(&seed);
+
+      if (go_up) {
+        lv++;
+        uint64_t chk = (uint64_t)lv;
+        if (chk == MAX_LEVEL) {
+          old_desc->SetLv(lv);
+          old_desc->AllocLvPointer();
+					break;
+        }
+      } else {
+        old_desc->SetLv(lv);
+        old_desc->AllocLvPointer();
+        break;
+      }
+    }
+
+    // submit chain
+    bool submit = oidmgr->SubmitSkipListChain(head);
+
+  }
+#endif /* HYU_SKIPLIST */
   // HYU_GC
-  // new_object->HYU_gc_candidate_clsn_ = volatile_read(MM::gc_lsn);
+  //new_object->HYU_candidate_clsn_ = volatile_read(MM::gc_lsn);
   // HYU_GC end
   if (overwrite) {
     new_object->SetNextPersistent(old_desc->GetNextPersistent());
@@ -863,6 +933,13 @@ install:
     new_object->SetVRidgyLevel(old_desc->GetVRidgyLevel());
     new_object->rec_id = old_desc->rec_id;
 #endif /* HYU_VWEAVER */
+#ifdef HYU_SKIPLIST /* HYU_SKIPLIST */
+    new_object->SetSentinel(old_desc->GetSentinel());
+    new_object->SetLv(old_desc->GetLv());
+    new_object->SetLvPointer(old_desc->GetLvPointer());
+    new_object->rec_id = old_desc->rec_id;
+    SentinelOverwrite(*new_obj_ptr);
+#endif /* HYU_SKIPLIST */
     // I already claimed it, no need to use cas then
     volatile_write(ptr->_ptr, new_obj_ptr->_ptr);
     __sync_synchronize();
@@ -906,8 +983,40 @@ install:
     __sync_synchronize();
 #endif /* HYU_VWEAVER */
 
+#ifdef HYU_SKIPLIST /* HYU_SKIPLIST */
+    // inherit sentinel array ptr and clsn array ptr
+    new_object->SetSentinel(old_desc->GetSentinel());
+    // Decide level
+    uint8_t lv = 1;
+    while (1) {
+      int go_up = new_object->TossCoin2(&seed);
+
+      if (go_up) {
+        lv++;
+        uint64_t chk = (uint64_t)lv;
+        if (chk == MAX_LEVEL) {
+          new_object->SetLv(lv);
+          new_object->AllocLvPointer();
+					break;
+        }
+      } else {
+        new_object->SetLv(lv);
+        new_object->AllocLvPointer();
+        break;
+      }
+    }
+
+    new_object->rec_id = o;
+    __sync_synchronize();
+#endif /* HYU_SKIPLIST */
+
     if (__sync_bool_compare_and_swap(&ptr->_ptr, head._ptr,
                                      new_obj_ptr->_ptr)) {
+#ifdef HYU_SKIPLIST /* HYU_SKIPLIST */
+      // submit chain
+      bool submit = SubmitSkipListChain(*new_obj_ptr);
+#endif /* HYU_SKIPLIST */
+
 #ifdef HYU_VWEAVER /* HYU_VWEAVER */
 #ifdef HYU_EVAL    /* HYU_EVAL */
       if (!updater_xc->xct->check) {
@@ -925,6 +1034,9 @@ install:
       }
       return head;
     } else {
+#ifdef HYU_SKIPLIST /* HYU_SKIPLIST */
+			MM::deallocate(new_object->GetLvPointer());
+#endif /* HYU_SKIPLIST */
       MM::deallocate(*new_obj_ptr);
     }
   }
@@ -1196,7 +1308,7 @@ start_over:
 
 #endif /* HYU_DEBUG */
 
-#ifdef HYU_EVAL_2 /* HYU_EVAL_2 */
+#if defined(HYU_EVAL_2) || defined(HYU_EVAL_OBJ) /* HYU_EVAL_2 */
 // For tuple arrays only, i.e., entries are guaranteed to point to Objects.
 dbtuple *sm_oid_mgr::oid_get_version_eval_stack(oid_array *oa, OID o,
                                                 TXN::xid_context *visitor_xc) {
@@ -1278,11 +1390,12 @@ start_over:
   uint64_t next_null_cnt = 0;
   uint64_t total_next_cnt = 0;
   uint64_t v_ridgy_cnt = 0;
-  // int cur_level = 0;
-  // printf("start count!\n");
-  // FILE* fp_cnt = fopen("chain_count.data", "a+");
-  // fprintf(fp_cnt, "timestamp: %lu\n", visitor_xc->begin);
-  // fflush(fp_cnt);
+  // for tracking
+	int cur_level = 0;
+  printf("start count!\n");
+  FILE* fp_cnt = fopen("chain_count_weaver.data", "a+");
+  fprintf(fp_cnt, "timestamp: %lu\n", visitor_xc->begin);
+  fflush(fp_cnt);
   while (ptr.offset()) {
     Object *cur_obj = nullptr;
     Object *v_ridgy_obj = nullptr;
@@ -1327,14 +1440,12 @@ start_over:
       goto start_over;
     }
     if (visible) {
-      // total_next_cnt = next_null_cnt + next_gced_cnt + next_vi_cnt;
-      // printf(fp_cnt, "next_null_cnt: %lu, next_gced_cnt: %lu, next_vi_cnt:
-      // %lu, total_next_cnt: %lu, v_ridgy_cnt: %lu\n", next_null_cnt,
-      // next_gced_cnt, next_vi_cnt, total_next_cnt, v_ridgy_cnt);
-      printf("%lu\n", total_next_cnt + v_ridgy_cnt);
-      // fprintf(fp_cnt, " %lu\n", total_next_cnt + v_ridgy_cnt);
-      // fflush(fp_cnt);
-      // fclose(fp_cnt);
+      total_next_cnt = next_null_cnt + next_gced_cnt + next_vi_cnt;
+      fprintf(fp_cnt, "total_next_cnt: %lu\n", total_next_cnt);
+      //printf("%lu\n", total_next_cnt + v_ridgy_cnt);
+      //fprintf(fp_cnt, " %lu\n", total_next_cnt + v_ridgy_cnt);
+      fflush(fp_cnt);
+      fclose(fp_cnt);
       return cur_obj->GetPinnedTuple();
     } else {
       v_ridgy_obj = (Object *)tentative_v_ridgy.offset();
@@ -1372,17 +1483,480 @@ start_over:
     }
   }
 
-  // total_next_cnt = next_null_cnt + next_gced_cnt + next_vi_cnt;
-  // fprintf(fp_cnt, "next_null_cnt: %lu, next_gced_cnt: %lu, next_vi_cnt: %lu,
-  // total_next_cnt: %lu, v_ridgy_cnt: %lu at the end\n", next_null_cnt,
-  // next_gced_cnt, next_vi_cnt, total_next_cnt, v_ridgy_cnt);
-  printf("%lu at the end\n", total_next_cnt + v_ridgy_cnt);
+  total_next_cnt = next_null_cnt + next_gced_cnt + next_vi_cnt;
+  fprintf(fp_cnt, "total_next_cnt: %lu at the end\n", total_next_cnt);
+  //printf("%lu at the end\n", total_next_cnt + v_ridgy_cnt);
   // fprintf(fp_cnt, " %lu\n", total_next_cnt + v_ridgy_cnt);
-  // fflush(fp_cnt);
-  // fclose(fp_cnt);
+  fflush(fp_cnt);
+  fclose(fp_cnt);
   return nullptr;  // No Visible records
 }
+
+#ifdef HYU_SKIPLIST /* HYU_SKIPLIST */
+// For tuple arrays only, i.e., entries are guaranteed to point to Objects.
+dbtuple *sm_oid_mgr::oid_get_version_skiplist_eval(oid_array *oa, OID o,
+                                     TXN::xid_context *visitor_xc) {
+  fat_ptr *entry = oa->get(o);
+start_over:
+  fat_ptr ptr = volatile_read(*entry);
+  fat_ptr start_ptr = NULL_PTR;
+  fat_ptr *sentinel = nullptr;
+  uint8_t cur_lev = MAX_LEVEL;
+  ASSERT(ptr.asi_type() == 0);
+  Object *prev_obj = nullptr;
+  uint64_t total_next_cnt = 0;
+  // for tracking
+	int cur_level = 0;
+  printf("start count!\n");
+  FILE* fp_cnt = fopen("chain_count_skip.data", "a+");
+  fprintf(fp_cnt, "timestamp: %lu\n", visitor_xc->begin);
+  fflush(fp_cnt);
+
+  if (ptr.offset()) {
+    Object *temp_obj = (Object *)ptr.offset();
+    sentinel = (fat_ptr *)temp_obj->GetSentinel().offset();
+  } else {
+    return nullptr;
+  }
+
+  if (sentinel == NULL_PTR) {
+    total_next_cnt++;
+    Object *head_obj = (Object *)ptr.offset();
+    bool head_retry = false;
+    bool head_visible = TestVisibility(head_obj, visitor_xc, head_retry);
+
+    if (head_retry) {
+      goto start_over;
+    }
+
+    if (head_visible) {
+      fprintf(fp_cnt, "total_next_cnt: %lu\n",total_next_cnt);
+      fflush(fp_cnt);
+      fclose(fp_cnt);
+      return head_obj->GetPinnedTuple();
+    } else {
+      return nullptr;
+    }
+  }
+
+  // find start point from sentinel
+  bool start_visible = false;
+  bool start_retry = false;
+  Object *start_obj = nullptr;
+  for (int i = 1; i <= MAX_LEVEL; i++) {
+    total_next_cnt++;
+    start_ptr = volatile_read(sentinel[i]);
+    if (start_ptr == NULL_PTR) continue;
+    start_obj = (Object *)start_ptr.offset();
+    start_visible = TestVisibility(start_obj, visitor_xc, start_retry);
+
+    // is GCed?
+    /*if ((start_ptr != ptr && start_obj->GetClsn().offset().asi_type() != fat_ptr::ASI_LOG) ||
+        LSN::from_ptr(start_obj->GetClsn()).offset() >=
+        LSN::from_ptr(cur_obj->GetClsn()).offset()) {
+      break;
+    }*/
+
+    if (start_retry && start_obj->GetClsn().offset() == 0) break;
+
+    if (start_retry) {
+      goto start_over;
+    }
+
+    if (!start_visible) {
+      ptr = start_ptr;
+      cur_lev = i;
+      break;
+    }
+  }
+
+  while (ptr.offset()) {
+    Object *cur_obj = nullptr;
+    // Must read next_ before reading cur_obj->_clsn:
+    // the version we're currently reading (ie cur_obj) might be unlinked
+    // and thus recycled by the memory allocator at any time if it's not
+    // a committed version. If so, cur_obj->_next will be pointing to some
+    // other object in the allocator's free object pool - we'll probably
+    // end up at la-la land if we followed this _next pointer value...
+    // Here we employ some flavor of OCC to solve this problem:
+    // the aborting transaction that will unlink cur_obj will update
+    // cur_obj->_clsn to NULL_PTR, then deallocate(). Before reading
+    // cur_obj->_clsn, we (as the visitor), first dereference pp to get
+    // a stable value that "should" contain the right address of the next
+    // version. We then read cur_obj->_clsn to verify: if it's NULL_PTR
+    // that means we might have read a wrong _next value that's actually
+    // pointing to some irrelevant object in the allocator's memory pool,
+    // hence must start over from the beginning of the version chain.
+    fat_ptr tentative_next = NULL_PTR;
+    fat_ptr tentative_jump = NULL_PTR;
+    fat_ptr *lv_array = nullptr;
+    uint8_t level = 0;
+    // If this is a backup server, then must see persistent_next to find out
+    // the **real** overwritten version.
+    if (config::is_backup_srv() && !config::command_log) {
+      oid_get_version_backup(ptr, tentative_next, prev_obj, cur_obj,
+                             visitor_xc);
+    } else {
+      ASSERT(ptr.asi_type() == 0);
+      cur_obj = (Object *)ptr.offset();
+      tentative_next = cur_obj->GetNextVolatile();
+      lv_array = (fat_ptr *)cur_obj->GetLvPointer().offset();
+      level = cur_obj->GetLv();
+      ASSERT(tentative_next.asi_type() == 0);
+    }
+
+    bool retry = false;
+    bool visible = TestVisibility(cur_obj, visitor_xc, retry);
+    if (retry) {
+      goto start_over;
+    }
+    if (visible) {
+      total_next_cnt++;
+      fprintf(fp_cnt, "total_next_cnt: %lu\n",total_next_cnt);
+      fflush(fp_cnt);
+      fclose(fp_cnt);
+
+      return cur_obj->GetPinnedTuple();
+    } else {
+      int lv;
+      //for (lv = level; lv >= 1; lv--) {
+      for (lv = cur_lev; lv >= 1; lv--) {
+        total_next_cnt++;
+        tentative_jump = lv_array[lv];
+        if (!tentative_jump.offset()) continue;
+        Object *temp_obj = (Object *)tentative_jump.offset();
+        fat_ptr temp_clsn = temp_obj->GetClsn();
+
+        // is GCed?
+        if (temp_clsn.asi_type() != fat_ptr::ASI_LOG ||
+            LSN::from_ptr(temp_clsn).offset() >=
+            LSN::from_ptr(cur_obj->GetClsn()).offset()) {
+          ptr = tentative_next;
+          prev_obj = cur_obj;
+          continue;
+        }
+
+        bool temp_retry = false;
+        bool temp_visible = TestVisibility(temp_obj, visitor_xc, temp_retry);
+
+        if (temp_retry && temp_obj->GetClsn().offset() == 0) {
+          lv = 0;
+          break;
+        }
+
+				if (temp_retry) {
+          goto start_over;
+        }
+
+        if (!temp_visible) break;
+      }
+
+      if (lv != 0) {
+        ptr = tentative_jump;
+        prev_obj = cur_obj;
+        continue;
+      }
+    }
+    ptr = tentative_next;
+    prev_obj = cur_obj;
+  }
+  fprintf(fp_cnt, "total_next_cnt: %lu at the end\n", total_next_cnt);
+  fflush(fp_cnt);
+  fclose(fp_cnt);
+
+  return nullptr;  // No Visible records
+}
+
+#endif /* HYU_SKIPLIST */
 #endif /* HYU_EVAL_2 */
+
+#ifdef HYU_SKIPLIST /* HYU_SKIPLIST */
+// For tuple arrays only, i.e., entries are guaranteed to point to Objects.
+dbtuple *sm_oid_mgr::oid_get_version_skiplist(oid_array *oa, OID o,
+                                     TXN::xid_context *visitor_xc) {
+  fat_ptr *entry = oa->get(o);
+start_over:
+  fat_ptr ptr = volatile_read(*entry);
+  fat_ptr start_ptr = NULL_PTR;
+  fat_ptr *sentinel = nullptr;
+  uint8_t cur_lev = MAX_LEVEL;
+  ASSERT(ptr.asi_type() == 0);
+  Object *prev_obj = nullptr;
+  if (ptr.offset()) {
+    Object *temp_obj = (Object *)ptr.offset();
+    sentinel = (fat_ptr *)temp_obj->GetSentinel().offset();
+  } else {
+    return nullptr;
+  }
+
+  if (sentinel == NULL_PTR) {
+    Object *head_obj = (Object *)ptr.offset();
+    bool head_retry = false;
+    bool head_visible = TestVisibility(head_obj, visitor_xc, head_retry);
+
+    if (head_retry) {
+      goto start_over;
+    }
+
+    if (head_visible) {
+      return head_obj->GetPinnedTuple();
+    } else {
+      return nullptr;
+    }
+  }
+
+  // find start point from sentinel
+  bool start_visible = false;
+  bool start_retry = false;
+  Object *start_obj = nullptr;
+  for (int i = 1; i <= MAX_LEVEL; i++) {
+    start_ptr = volatile_read(sentinel[i]);
+    if (start_ptr == NULL_PTR) continue;
+    start_obj = (Object *)start_ptr.offset();
+    start_visible = TestVisibility(start_obj, visitor_xc, start_retry);
+
+    // is GCed?
+    /*if ((start_ptr != ptr && start_obj->GetClsn().offset().asi_type() != fat_ptr::ASI_LOG) ||
+        LSN::from_ptr(start_obj->GetClsn()).offset() >=
+        LSN::from_ptr(cur_obj->GetClsn()).offset()) {
+      break;
+    }*/
+
+    if (start_retry && start_obj->GetClsn().offset() == 0) break;
+
+    if (start_retry) {
+      goto start_over;
+    }
+
+    if (!start_visible) {
+      ptr = start_ptr;
+      cur_lev = i;
+      break;
+    }
+  }
+
+  while (ptr.offset()) {
+    Object *cur_obj = nullptr;
+    // Must read next_ before reading cur_obj->_clsn:
+    // the version we're currently reading (ie cur_obj) might be unlinked
+    // and thus recycled by the memory allocator at any time if it's not
+    // a committed version. If so, cur_obj->_next will be pointing to some
+    // other object in the allocator's free object pool - we'll probably
+    // end up at la-la land if we followed this _next pointer value...
+    // Here we employ some flavor of OCC to solve this problem:
+    // the aborting transaction that will unlink cur_obj will update
+    // cur_obj->_clsn to NULL_PTR, then deallocate(). Before reading
+    // cur_obj->_clsn, we (as the visitor), first dereference pp to get
+    // a stable value that "should" contain the right address of the next
+    // version. We then read cur_obj->_clsn to verify: if it's NULL_PTR
+    // that means we might have read a wrong _next value that's actually
+    // pointing to some irrelevant object in the allocator's memory pool,
+    // hence must start over from the beginning of the version chain.
+    fat_ptr tentative_next = NULL_PTR;
+    fat_ptr tentative_jump = NULL_PTR;
+    fat_ptr *lv_array = nullptr;
+    uint8_t level = 0;
+    // If this is a backup server, then must see persistent_next to find out
+    // the **real** overwritten version.
+    if (config::is_backup_srv() && !config::command_log) {
+      oid_get_version_backup(ptr, tentative_next, prev_obj, cur_obj,
+                             visitor_xc);
+    } else {
+      ASSERT(ptr.asi_type() == 0);
+      cur_obj = (Object *)ptr.offset();
+      tentative_next = cur_obj->GetNextVolatile();
+      lv_array = (fat_ptr *)cur_obj->GetLvPointer().offset();
+      level = cur_obj->GetLv();
+      ASSERT(tentative_next.asi_type() == 0);
+    }
+
+    bool retry = false;
+    bool visible = TestVisibility(cur_obj, visitor_xc, retry);
+    if (retry) {
+      goto start_over;
+    }
+    if (visible) {
+      return cur_obj->GetPinnedTuple();
+    } else {
+      int lv;
+      //for (lv = level; lv >= 1; lv--) {
+      for (lv = cur_lev; lv >= 1; lv--) {
+        tentative_jump = lv_array[lv];
+        if (!tentative_jump.offset()) continue;
+        Object *temp_obj = (Object *)tentative_jump.offset();
+        fat_ptr temp_clsn = temp_obj->GetClsn();
+
+        // is GCed?
+        if (temp_clsn.asi_type() != fat_ptr::ASI_LOG ||
+            LSN::from_ptr(temp_clsn).offset() >=
+            LSN::from_ptr(cur_obj->GetClsn()).offset()) {
+          ptr = tentative_next;
+          prev_obj = cur_obj;
+          continue;
+        }
+
+        bool temp_retry = false;
+        bool temp_visible = TestVisibility(temp_obj, visitor_xc, temp_retry);
+
+        if (temp_retry && temp_obj->GetClsn().offset() == 0) {
+          lv = 0;
+          break;
+        }
+
+				if (temp_retry) {
+          goto start_over;
+        }
+
+        if (!temp_visible) break;
+      }
+
+      if (lv != 0) {
+        ptr = tentative_jump;
+        prev_obj = cur_obj;
+        continue;
+      }
+    }
+    ptr = tentative_next;
+    prev_obj = cur_obj;
+  }
+
+  return nullptr;  // No Visible records
+}
+
+// For tuple arrays only, i.e., entries are guaranteed to point to Objects.
+dbtuple *sm_oid_mgr::oid_get_version_skiplist_from_ver(fat_ptr ver,
+                                     TXN::xid_context *visitor_xc) {
+start_over:
+  fat_ptr ptr = ver;
+  fat_ptr start_ptr = NULL_PTR;
+  fat_ptr *sentinel = nullptr;
+  ASSERT(ptr.asi_type() == 0);
+  Object *prev_obj = nullptr;
+  if (ptr.offset()) {
+    Object *temp_obj = (Object *)ptr.offset();
+    sentinel = (fat_ptr *)temp_obj->GetSentinel().offset();
+  } else {
+    return nullptr;
+  }
+
+  // find start point from sentinel
+  bool start_visible = false;
+  bool start_retry = false;
+  Object *start_obj = nullptr;
+  for (int i = 1; i <= MAX_LEVEL; i++) {
+    start_ptr = volatile_read(sentinel[i]);
+    if (start_ptr == NULL_PTR) continue;
+    start_obj = (Object *)start_ptr.offset();
+
+    // is GCed?
+    /*if ((start_ptr != ptr && start_obj->GetClsn().offset().asi_type() != fat_ptr::ASI_LOG) ||
+        LSN::from_ptr(start_obj->GetClsn()).offset() >=
+        LSN::from_ptr(cur_obj->GetClsn()).offset()) {
+      break;
+    }*/
+
+    start_visible = TestVisibility(start_obj, visitor_xc, start_retry);
+
+    if (start_retry && start_obj->GetClsn().offset() == 0) break;
+
+    if (start_retry) {
+      goto start_over;
+    }
+
+    if (!start_visible) {
+      ptr = start_ptr;
+      break;
+		}
+  }
+
+  while (ptr.offset()) {
+    Object *cur_obj = nullptr;
+    // Must read next_ before reading cur_obj->_clsn:
+    // the version we're currently reading (ie cur_obj) might be unlinked
+    // and thus recycled by the memory allocator at any time if it's not
+    // a committed version. If so, cur_obj->_next will be pointing to some
+    // other object in the allocator's free object pool - we'll probably
+    // end up at la-la land if we followed this _next pointer value...
+    // Here we employ some flavor of OCC to solve this problem:
+    // the aborting transaction that will unlink cur_obj will update
+    // cur_obj->_clsn to NULL_PTR, then deallocate(). Before reading
+    // cur_obj->_clsn, we (as the visitor), first dereference pp to get
+    // a stable value that "should" contain the right address of the next
+    // version. We then read cur_obj->_clsn to verify: if it's NULL_PTR
+    // that means we might have read a wrong _next value that's actually
+    // pointing to some irrelevant object in the allocator's memory pool,
+    // hence must start over from the beginning of the version chain.
+    fat_ptr tentative_next = NULL_PTR;
+    fat_ptr tentative_jump = NULL_PTR;
+    fat_ptr *lv_array = nullptr;
+    uint8_t level = 0;
+    // If this is a backup server, then must see persistent_next to find out
+    // the **real** overwritten version.
+    if (config::is_backup_srv() && !config::command_log) {
+      oid_get_version_backup(ptr, tentative_next, prev_obj, cur_obj,
+                             visitor_xc);
+    } else {
+      ASSERT(ptr.asi_type() == 0);
+      cur_obj = (Object *)ptr.offset();
+      tentative_next = cur_obj->GetNextVolatile();
+      lv_array = (fat_ptr *)cur_obj->GetLvPointer().offset();
+      level = cur_obj->GetLv();
+      ASSERT(tentative_next.asi_type() == 0);
+    }
+
+    bool retry = false;
+    bool visible = TestVisibility(cur_obj, visitor_xc, retry);
+    if (retry) {
+      goto start_over;
+    }
+    if (visible) {
+      return cur_obj->GetPinnedTuple();
+    } else {
+      int lv;
+      for (lv = level; lv >= 1; lv--) {
+        tentative_jump = lv_array[lv];
+        if (!tentative_jump.offset()) continue;
+        Object *temp_obj = (Object *)tentative_jump.offset();
+        fat_ptr temp_clsn = temp_obj->GetClsn();
+
+        // is GCed?
+        if (temp_clsn.asi_type() != fat_ptr::ASI_LOG ||
+            LSN::from_ptr(temp_clsn).offset() >=
+            LSN::from_ptr(cur_obj->GetClsn()).offset()) {
+          ptr = tentative_next;
+          prev_obj = cur_obj;
+          continue;
+        }
+
+        bool temp_retry = false;
+        bool temp_visible = TestVisibility(temp_obj, visitor_xc, temp_retry);
+
+        if (temp_retry && temp_obj->GetClsn().offset() == 0) {
+          lv = 0;
+          break;
+        }
+
+        if (temp_retry) {
+          goto start_over;
+        }
+
+        if (!temp_visible) break;
+      }
+
+      if (lv != 0) {
+        ptr = tentative_jump;
+        prev_obj = cur_obj;
+        continue;
+      }
+    }
+    ptr = tentative_next;
+    prev_obj = cur_obj;
+  }
+
+  return nullptr;  // No Visible records
+}
+
+#endif /* HYU_SKIPLIST */
 
 // For tuple arrays only, i.e., entries are guaranteed to point to Objects.
 dbtuple *sm_oid_mgr::oid_get_version(oid_array *oa, OID o,

@@ -68,7 +68,7 @@ class OrderedIndex {
    * Get a key of length keylen. The underlying DB does not manage
    * the memory associated with key. [rc] stores TRUE if found, FALSE otherwise.
    */
-#ifdef HYU_EVAL_2 /* HYU_EVAL_2 */
+#if defined(HYU_EVAL_2) || defined(HYU_EVAL_OBJ) /* HYU_EVAL_2 */
   virtual void Get_eval(transaction *t, rc_t &rc, const varstr &key,
                         varstr &value, int flag, OID *out_oid = nullptr) = 0;
 #endif /* HYU_EVAL_2 */

@@ -592,7 +592,16 @@ int basic_table<P>::scan(H helper, Str firstkey, bool emit_firstkey, F &scanner,
       if (ermia::config::is_backup_srv()) {
         v = ermia::oidmgr->BackupGetVersion(tuple_array_, pdest_array_, o, xc);
       } else {
+#ifdef HYU_SKIPLIST /* HYU_SKIPLIST */
+        v = ermia::oidmgr->oid_get_version_skiplist(tuple_array_, o, xc);
+        // for debug
+				ermia::dbtuple *v_check = NULL;
+				v_check = ermia::oidmgr->oid_get_version(tuple_array_, o, xc);
+				if (v_check != v)
+					printf("NOOOOOO\n");
+#else /* HYU_SKIPLIST */
         v = ermia::oidmgr->oid_get_version(tuple_array_, o, xc);
+#endif /* HYU_SKIPLIST */
       }
       if (v) {
         if (!scanner.visit_value(ka, v)) goto done;

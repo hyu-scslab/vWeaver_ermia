@@ -4,6 +4,9 @@
 #include "sm-common.h"
 #include "sm-log.h"
 #include "sm-oid-alloc-impl.h"
+#if defined(HYU_SKIPLIST) || defined(HYU_SKIPLIST_EVAL)
+#include "sm-alloc.h"
+#endif
 
 #include "dynarray.h"
 
@@ -11,6 +14,11 @@
 #include "../tuple.h"
 
 namespace ermia {
+
+#ifdef HYU_SKIPLIST /* HYU_SKIPLIST */
+#define SKIPLIST_MAX_LEVEL (256)
+extern thread_local uint64_t seed;
+#endif /* HYU_SKIPLIST */
 
 typedef epoch_mgr::epoch_num epoch_num;
 
@@ -172,6 +180,10 @@ struct sm_oid_mgr {
 #ifdef HYU_VWEAVER /* HYU_VWEAVER */
   bool SubmitVRidgyChain(Object *new_obj, fat_ptr old_ptr);
 #endif /* HYU_VWEAVER */
+#ifdef HYU_SKIPLIST /* HYU_SKIPLIST */
+  void SentinelOverwrite(fat_ptr new_obj);
+  bool SubmitSkipListChain(fat_ptr new_obj);
+#endif /* HYU_SKIPLIST */
 
   /* Return a fat_ptr to the overwritten object (could be an in-flight version!)
    */
@@ -218,6 +230,15 @@ struct sm_oid_mgr {
   dbtuple *oid_get_version_eval(oid_array *oa, OID o,
                                 TXN::xid_context *visitor_xc);
 #endif /* HYU_EVAL_2 */
+
+#ifdef HYU_SKIPLIST /* HYU_SKIPLIST */
+  dbtuple *oid_get_version_skiplist_eval(oid_array *oa, OID o,
+                                TXN::xid_context *visitor_xc);
+  dbtuple *oid_get_version_skiplist(oid_array *oa, OID o,
+                                    TXN::xid_context *visitor_xc);
+  dbtuple *oid_get_version_skiplist_from_ver(fat_ptr ver,
+                                             TXN::xid_context *visitor_xc);
+#endif /* HYU_SKIPLIST */
 
   void oid_get_version_backup(fat_ptr &ptr, fat_ptr &tentative_next,
                               Object *prev_obj, Object *&cur_obj,
@@ -299,6 +320,16 @@ struct sm_oid_mgr {
     // using a CAS is overkill: head is guaranteed to be the (only) dirty
     // version
     volatile_write(ptr->_ptr, head_obj->GetNextVolatile()._ptr);
+#ifdef HYU_SKIPLIST /* HYU_SKIPLIST */
+    // [HYU]
+    // When we fail to try insert new tuple, we have to deallocate sentinel and
+    // sentinel clsn because of dangling pointer problem. Sentinel is just made
+    // once when tuple insertion occurs, so we can deallocate in fail case only
+    // this point.
+    if (head_obj->GetSentinel() != NULL_PTR && head_obj->GetNextVolatile() == NULL_PTR) {
+		  MM::deallocate(head_obj->GetSentinel());
+    }
+#endif /* HYU_SKIPLIST */
     __sync_synchronize();
     // tzwang: The caller is responsible for deallocate() the head version
     // got unlinked - a update of own write will record the unlinked version

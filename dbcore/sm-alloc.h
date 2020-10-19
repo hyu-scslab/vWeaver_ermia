@@ -54,6 +54,9 @@ void gc_version_chain(fat_ptr *oid_entry);
 
 extern uint64_t gc_lsn;
 extern epoch_num gc_epoch;
+#if defined(HYU_SKIPLIST) || defined(HYU_SKIPLIST_EVAL)
+extern uint64_t memuse;
+#endif
 
 // A hashtab storing recycled (freed) objects by size. No CC.
 class TlsFreeObjectPool {

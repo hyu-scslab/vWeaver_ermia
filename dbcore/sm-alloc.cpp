@@ -39,6 +39,7 @@ uint64_t max_vclen = 0;
 uint64_t gc_lsn CACHE_ALIGNED;
 epoch_num gc_epoch CACHE_ALIGNED;
 
+// [HYU] epoch modify for update cost (default 1<<24, count 2000)
 static const uint64_t EPOCH_SIZE_NBYTES = 1 << 24;
 static const uint64_t EPOCH_SIZE_COUNT = 2000;
 
@@ -57,6 +58,9 @@ uint64_t safesnap_lsn = 0;
 thread_local TlsFreeObjectPool *tls_free_object_pool CACHE_ALIGNED;
 char **node_memory = nullptr;
 uint64_t *allocated_node_memory = nullptr;
+#if defined(HYU_SKIPLIST) || defined(HYU_SKIPLIST_EVAL)
+uint64_t memuse = 0;
+#endif
 static uint64_t thread_local tls_allocated_node_memory CACHE_ALIGNED;
 static const uint64_t tls_node_memory_mb = 200;  // default is 200
 
@@ -89,7 +93,7 @@ void prepare_node_memory() {
   }
 }
 
-#ifdef HYU_VWEAVER /* HYU_VWEAVER */
+#if defined(HYU_VWEAVER) /* HYU_VWEAVER */
 void gc_version_chain(fat_ptr *oid_entry) {
   fat_ptr ptr = *oid_entry;
   Object *cur_obj = (Object *)ptr.offset();
@@ -157,6 +161,71 @@ void gc_version_chain(fat_ptr *oid_entry) {
     }
   }
 }
+#elif defined(HYU_SKIPLIST) /* HYU_SKIPLIST */
+void gc_version_chain(fat_ptr *oid_entry) {
+  fat_ptr ptr = *oid_entry;
+  Object *cur_obj = (Object *)ptr.offset();
+  dbtuple *candidate = nullptr;
+
+  if (!cur_obj) {
+    // Tuple is deleted, skip
+    return;
+  }
+
+  // Start from the first **committed** version, and delete after its next,
+  // because the head might be still being modified (hence its _next field)
+  // and might be gone any time (tx abort). Skip records in chkpt file as
+  // well - not even in memory.
+  auto clsn = cur_obj->GetClsn();
+  fat_ptr *prev_next = nullptr;
+  if (clsn.asi_type() == fat_ptr::ASI_CHK) {
+    return;
+  }
+  if (clsn.asi_type() != fat_ptr::ASI_LOG) {
+    DCHECK(clsn.asi_type() == fat_ptr::ASI_XID);
+    ptr = cur_obj->GetNextVolatile();
+    cur_obj = (Object *)ptr.offset();
+  }
+
+  // Now cur_obj should be the fisrt committed version, continue to the version
+  // that can be safely recycled (the version after cur_obj).
+  ptr = cur_obj->GetNextVolatile();
+  prev_next = cur_obj->GetNextVolatilePtr();
+
+  uint64_t glsn = volatile_read(gc_lsn);
+  if (ptr.offset()) {
+    TXN::xid_context gc_xc;
+    gc_xc.begin = glsn;
+    candidate = oidmgr->oid_get_version_skiplist_from_ver(ptr, &gc_xc);
+  }
+
+  if (candidate) {
+    cur_obj = (Object *)candidate->GetObject();
+    ptr = cur_obj->GetNextVolatile();
+    prev_next = cur_obj->GetNextVolatilePtr();
+
+    if (ptr._ptr) {
+      volatile_write(prev_next->_ptr, 0);
+      while (ptr.offset()) {
+        cur_obj = (Object *)ptr.offset();
+        clsn = cur_obj->GetClsn();
+        ALWAYS_ASSERT(clsn.asi_type() == fat_ptr::ASI_LOG);
+        ALWAYS_ASSERT(LSN::from_ptr(clsn).offset() <= glsn);
+        fat_ptr next_ptr = cur_obj->GetNextVolatile();
+        cur_obj->SetSentinel(NULL_PTR);
+        cur_obj->SetLevel(0);
+        cur_obj->rec_id = 0;
+        if (!tls_free_object_pool) {
+          tls_free_object_pool = new TlsFreeObjectPool;
+        }
+        tls_free_object_pool->Put(cur_obj->GetLvPointer());
+        tls_free_object_pool->Put(ptr);
+        ptr = next_ptr;
+      }
+    }
+  }
+}
+
 #else  /* HYU_VWEAVER */
 void gc_version_chain(fat_ptr *oid_entry) {
   fat_ptr ptr = *oid_entry;
@@ -209,7 +278,7 @@ void gc_version_chain(fat_ptr *oid_entry) {
     uint64_t glsn = volatile_read(gc_lsn);
 
     // [HYU] GC optimization
-    // if (cur_obj->HYU_gc_candidate_clsn_ == glsn) {
+    //if (cur_obj->HYU_candidate_clsn_ == glsn) {
     //	break;
     //}
 
@@ -247,7 +316,7 @@ void gc_version_chain(fat_ptr *oid_entry) {
     }
   }
 }
-#endif /* HYU_VWEAVER */
+#endif /* HYU_VWEAVER & HYU_SKIPLIST*/
 
 void *allocate(size_t size) {
   size = align_up(size);
@@ -293,7 +362,9 @@ void *allocate_onnode(size_t size) {
   auto node = numa_node_of_cpu(sched_getcpu());
   ALWAYS_ASSERT(node < config::numa_nodes);
   auto offset = __sync_fetch_and_add(&allocated_node_memory[node], size);
-  // printf("[HYU] memory usage: %lu\n", allocated_node_memory[node]);
+#if defined(HYU_SKIPLIST) || defined(HYU_SKIPLIST_EVAL)
+  memuse = allocated_node_memory[node] / config::MB;
+#endif
   if (likely(offset + size <= config::node_memory_gb * config::GB)) {
     return node_memory[node] + offset;
   }

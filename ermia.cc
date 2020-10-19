@@ -179,7 +179,7 @@ std::map<std::string, uint64_t> ConcurrentMasstreeIndex::Clear() {
   return std::map<std::string, uint64_t>();
 }
 
-#ifdef HYU_EVAL_2 /* HYU_EVAL_2 */
+#if defined(HYU_EVAL_2) || defined(HYU_EVAL_OBJ) /* HYU_EVAL_2 */
 void ConcurrentMasstreeIndex::Get_eval(transaction *t, rc_t &rc,
                                        const varstr &key, varstr &value,
                                        int flag, OID *out_oid) {
@@ -207,8 +207,18 @@ void ConcurrentMasstreeIndex::Get_eval(transaction *t, rc_t &rc,
           tuple = oidmgr->oid_get_version_eval_stack(
               descriptor_->GetTupleArray(), oid, t->xc);
         } else {
+#if defined(HYU_EVAL_OBJ)
+          if (flag == 1) { //original skiplist
+            tuple = oidmgr->oid_get_version_skiplist_eval(descriptor_->GetTupleArray(),
+                                                 oid, t->xc); 
+          } else { //vweaver
+            tuple = oidmgr->oid_get_version_eval(descriptor_->GetTupleArray(),
+                                                 oid, t->xc);
+          }
+#else
           tuple = oidmgr->oid_get_version_eval(descriptor_->GetTupleArray(),
                                                oid, t->xc);
+#endif
         }
       }
       if (!tuple) {
@@ -280,7 +290,12 @@ void ConcurrentMasstreeIndex::Get(transaction *t, rc_t &rc, const varstr &key,
             oidmgr->oid_get_version_debug(descriptor_->GetTupleArray(), oid,
                                           t->xc, &point_cnt);
 #else            /* HYU_DEBUG */
+#ifdef HYU_SKIPLIST /* HYU_SKIPLIST */
+            oidmgr->oid_get_version_skiplist(descriptor_->GetTupleArray(), oid,
+                                             t->xc);
+#else /* HYU_SKIPLIST */
             oidmgr->oid_get_version(descriptor_->GetTupleArray(), oid, t->xc);
+#endif /* HYU_SKIPLIST */
 #endif           /* HYU_DEBUG */
         // if (tuple != zigzag_tuple) {
         //	printf("[HYU] scan fail in GET\n");

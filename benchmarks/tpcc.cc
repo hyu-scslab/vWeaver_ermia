@@ -1518,7 +1518,7 @@ class static_limit_callback : public ermia::OrderedIndex::ScanCallback {
   bool ignore_key;
 };
 
-#ifdef HYU_EVAL_2 /* HYU_EVAL_2 */
+#if defined(HYU_EVAL_2) || defined(HYU_EVAL_OBJ)
 static inline double to_double(uint64_t x) {
   const union {
     uint64_t i;
@@ -1678,7 +1678,11 @@ rc_t tpcc_worker::txn_delivery() {
     if (count % 100 == 0) {
       printf("\r proceeding.... %lu / 500", count / 100);
     }
+#ifdef HYU_EVAL_OBJ /* HYU_EVAL_OBJ */
+    for (int i = 1; i <= 10000; i++) {
+#else /* HYU_EVAL_OBJ */
     for (int i = 1; i <= 30000; i++) {
+#endif /* HYU_EVAL_OBJ */
       ermia::transaction *txn = db->NewTransaction(0, arena, txn_buf());
       if (!first) {
         first_begin = txn->xc->begin;
@@ -2064,7 +2068,7 @@ rc_t tpcc_worker::txn_credit_check() {
   return {RC_TRUE};
 }
 
-#ifdef HYU_EVAL_2 /* HYU_EVAL_2 */
+#if defined(HYU_EVAL_2) || defined(HYU_EVAL_OBJ)
 // In this func, we do 2 type of evaluation
 // 1. latency breakdown per version chain length
 // 2. latency breakdown per scan range
@@ -2087,6 +2091,22 @@ rc_t tpcc_worker::txn_payment() {
     timepoint[i - 1] = interval * i + first_begin;
     printf("timepoint %d: %lu\n", i, timepoint[i - 1]);
   }
+
+#ifdef HYU_EVAL_OBJ /* HYU_EVAL_OBJ */
+  printf("start object tracking\n");
+  for (int i = TIME_PARTITION - 1; i >= 0; i--) {
+    tnx->xc->begin = timepoint[i];
+		// point lookup
+    const stock::key k_w(1, 1);
+    ermia::valstr valptr;
+
+    rc = rc_t{RC_INVALID};
+    tbl_stock(1)->Get_eval(txn, rc, Encode(str(Size(k_w)), k_w), valptr, 1);
+    rc = rc_t{RC_INVALID};
+    tbl_stock(1)->Get_eval(txn, rc, Encode(str(Size(k_w)), k_w), valptr, 2);
+    TryVerifyRelaxed(rc);
+  }
+#endif /* HYU_EVAL_OBJ */
 
 #ifndef HYU_LONG_CHAIN /* HYU_LONG_CHAIN */
   printf("start vanilla uniform scan evaluation\n");

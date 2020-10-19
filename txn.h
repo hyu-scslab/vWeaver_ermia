@@ -232,7 +232,7 @@ class transaction {
 
   inline TXN::xid_context *GetXIDContext() { return xc; }
 
-#ifdef HYU_EVAL_2 /* HYU_EVAL_2 */
+#if defined(HYU_EVAL_2) || defined(HYU_EVAL_OBJ) /* HYU_EVAL_2 */
                   // we need to modify begin timestamp for evaluation 2
  public:
 #else  /* HYU_EVAL_2 */

@@ -71,6 +71,12 @@ class Object {
   VWeaver vweaver_;
 #endif /* HYU_VWEAVER */
 
+#ifdef HYU_SKIPLIST /* HYU_SKIPLIST */
+  fat_ptr sentinel_;
+  fat_ptr lv_pointer_;
+  uint8_t lv_;
+#endif /* HYU_SKIPLIST */
+
  public:
   static fat_ptr Create(const varstr* tuple_value, bool do_write,
                         epoch_num epoch);
@@ -81,7 +87,16 @@ class Object {
         pdest_(NULL_PTR),
         next_pdest_(NULL_PTR),
         next_volatile_(NULL_PTR),
+#ifdef HYU_SKIPLIST /* HYU_SKIPLIST */
+        clsn_(NULL_PTR),
+        sentinel_(NULL_PTR),
+        lv_pointer_(NULL_PTR),
+        lv_(0) {}
+#else /* HYU_SKIPLIST */
+        //clsn_(NULL_PTR),
+        //HYU_candidate_glsn(0) {}
         clsn_(NULL_PTR) {}
+#endif /* HYU_SKIPLIST */
 
   Object(fat_ptr pdest, fat_ptr next, epoch_num e, bool in_memory)
       : alloc_epoch_(e),
@@ -89,7 +104,16 @@ class Object {
         pdest_(pdest),
         next_pdest_(next),
         next_volatile_(NULL_PTR),
+#ifdef HYU_SKIPLIST /* HYU_SKIPLIST */
+        clsn_(NULL_PTR),
+        sentinel_(NULL_PTR),
+        lv_pointer_(NULL_PTR),
+        lv_(0) {}
+#else /* HYU_SKIPLIST */
+        //clsn_(NULL_PTR),
+        //HYU_candidate_glsn(0) {}
         clsn_(NULL_PTR) {}
+#endif /* HYU_SKIPLIST */
 
   inline bool IsDeleted() { return status_ == kStatusDeleted; }
   inline bool IsInMemory() { return status_ == kStatusMemory; }
@@ -148,13 +172,37 @@ class Object {
     volatile_write(vweaver_.k_ridgy_, k_ridgy);
   }
 #endif /* HYU_VWEAVER */
+
+#ifdef HYU_SKIPLIST /* HYU_SKIPLIST */
+  inline int TossCoin2(uint64_t* seed) {
+    *seed ^= *seed >> 12;
+    *seed ^= *seed << 25;
+    *seed ^= *seed >> 27;
+
+    return (*seed * 2685821657736338717ULL) % 2;
+  }
+  inline uint8_t GetLv() { return lv_; }
+  inline void SetLv(uint8_t level) { volatile_write(lv_, level); }
+  inline fat_ptr GetSentinel() { return volatile_read(sentinel_); }
+  inline fat_ptr GetLvPointer() { return volatile_read(lv_pointer_); }
+  inline void SetSentinel(fat_ptr sentinel) {
+    volatile_write(sentinel_, sentinel);
+  }
+  inline void SetLvPointer(fat_ptr lv_pointer) {
+    volatile_write(lv_pointer_, lv_pointer);
+  }
+  void AllocLvPointer();
+#endif /* HYU_SKIPLIST */
+
   fat_ptr GenerateClsnPtr(uint64_t clsn);
   void Pin(
       bool load_from_logbuf = false);  // Make sure the payload is in memory
 
-#ifdef HYU_VWEAVER /* HYU_VWEAVER */
+/* HYU_VWEAVER || HYU_SKIPLIST */
+#if defined(HYU_VWEAVER) || defined(HYU_SKIPLIST)
   OID rec_id;
-#endif /* HYU_VWEAVER */
+#endif /* HYU_VWEAVER || HYU_SKIPLIST */
+  //uint64_t HYU_candidate_glsn;
 };
 
 }  // namespace ermia

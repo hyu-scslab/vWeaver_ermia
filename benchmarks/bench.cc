@@ -157,6 +157,15 @@ void bench_worker::MyWork(char *) {
       continue;
 #endif /* HYU_EVAL_2 */
 
+#ifdef HYU_EVAL_OBJ /* HYU_EVAL_OBJ */
+      if (!start_flag) {
+        do_workload_function(2);
+        do_workload_function(1);
+        start_flag = true;
+      }
+      continue;
+#endif /* HYU_EVAL_OBJ */
+
       double d = r.next_uniform();
       for (size_t i = 0; i < workload.size(); i++) {
         if ((i + 1) == workload.size() || d < workload[i].frequency) {
@@ -415,6 +424,13 @@ void bench_runner::start_measurement() {
 #ifdef HYU_MOTIVATION /* HYU_MOTIVATION */
   FILE *fp = fopen("throughput.data", "a+");
 #endif /* HYU_MOTIVATION */
+#if defined(HYU_SKIPLIST)
+  FILE *skip_throughput = fopen("ordi_throughput.data", "a+");
+  FILE *skip_fp = fopen("ordi_memuse.data", "a+");
+#elif defined(HYU_SKIPLIST_EVAL)
+  FILE *skip_throughput = fopen("frug_throughput.data", "a+");
+  FILE *skip_fp = fopen("frug_memuse.data", "a+");
+#endif
   workers = make_workers();
   ALWAYS_ASSERT(!workers.empty());
   for (std::vector<bench_worker *>::const_iterator it = workers.begin();
@@ -513,9 +529,17 @@ void bench_runner::start_measurement() {
              sec_util);
     } else {
       printf("%lu,%lu,%lu\n", slept + 1, sec_commits, sec_aborts);
-#ifdef HYU_MOTIVATION /* HYU_MOTIVATION */
+#if defined(HYU_MOTIVATION)
       fprintf(fp, "%lu,%lu,%lu\n", slept + 1, sec_commits, sec_aborts);
-#endif /* HYU_MOTIVATION */
+#elif defined(HYU_SKIPLIST) || defined(HYU_SKIPLIST_EVAL)
+      fprintf(skip_throughput, "%lu,%lu\n", slept + 1, sec_commits);
+      fflush(skip_throughput);
+      if ((slept + 1) % 10 == 0) {
+        printf("%lu,%lu\n", slept + 1, ermia::MM::memuse);
+        fprintf(skip_fp, "%lu,%lu\n", slept + 1, ermia::MM::memuse);
+        fflush(skip_fp);
+      }
+#endif
     }
     slept++;
   };
@@ -714,6 +738,10 @@ void bench_runner::start_measurement() {
 #ifdef HYU_MOTIVATION /* HYU_MOTIVATION */
   fclose(fp);
 #endif /* HYU_MOTIVATION */
+#if defined(HYU_SKIPLIST) || defined(HYU_SKIPLIST_EVAL)
+  fclose(skip_fp);
+  fclose(skip_throughput);
+#endif
   std::cout.flush();
 }
 

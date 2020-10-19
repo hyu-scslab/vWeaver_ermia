@@ -186,6 +186,11 @@ void transaction::Abort() {
     oidmgr->PrimaryTupleUnlink(w.entry);
     obj->SetClsn(NULL_PTR);
     ASSERT(obj->GetAllocateEpoch() == xc->begin_epoch);
+#ifdef HYU_SKIPLIST /* HYU_SKIPLIST */
+    if (obj->GetSentinel() != NULL_PTR) {
+      MM::deallocate(obj->GetLvPointer());
+    }
+#endif /* HYU_SKIPLIST */
     MM::deallocate(entry);
   }
 
@@ -1567,6 +1572,12 @@ OID transaction::PrepareInsert(OrderedIndex *index, varstr *value,
     Object *new_head_obj = (Object *)new_head.offset();
     new_head_obj->rec_id = oid;
 #endif /* HYU_VWEAVER */
+
+#ifdef HYU_SKIPLIST /* HYU_SKIPLIST */
+    // make record sentinel and sentinel clsn array for skiplist
+    Object *new_head_obj = (Object *)new_head.offset();
+    new_head_obj->rec_id = oid;
+#endif /* HYU_SKIPLIST */
     // [HYU]
     __sync_synchronize();
     // [HYU] end

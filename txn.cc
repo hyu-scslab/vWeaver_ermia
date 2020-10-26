@@ -1551,7 +1551,7 @@ rc_t transaction::Update(IndexDescriptor *index_desc, OID oid, const varstr *k,
       }
     }
 #if defined(HYU_SKIPLIST) || defined(HYU_SKIPLIST_EVAL) || defined(HYU_VANILLA_EVAL)
-    update_count++;
+    __sync_fetch_and_add(&update_count, 1);
 #endif
     return rc_t{RC_TRUE};
   } else {  // somebody else acted faster than we did

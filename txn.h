@@ -28,6 +28,10 @@
 using google::dense_hash_map;
 
 namespace ermia {
+#if defined(HYU_SKIPLIST) || defined(HYU_SKIPLIST_EVAL) || defined(HYU_VANILLA_EVAL)
+extern uint64_t update_count;
+#endif
+
 #ifdef HYU_VWEAVER /* HYU_VWEAVER */
 struct next_key_info_t {
   OID oid;

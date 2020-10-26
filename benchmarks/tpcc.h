@@ -8,6 +8,7 @@
 #define SCAN_VANILLA 0
 #define SCAN_VRIDGY 1
 #define SCAN_VWEAVER 2
+#define SCAN_SKIPLIST 3
 #define TIME_PARTITION (10)
 #define RANGE_PARTITION (10)
 #define RANGE_IN_STOCK (1000)

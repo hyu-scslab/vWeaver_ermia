@@ -27,6 +27,10 @@ sm_oid_mgr *oidmgr = NULL;
 thread_local uint64_t seed;
 #endif /* HYU_VWEAVER || HYU_SKIPLIST */
 
+#if defined(HYU_EVAL_2) || defined(HYU_EVAL_OBJ)
+uint64_t total_next_cnt = 0;
+#endif
+
 struct thread_data {
   static size_t const NENTRIES = 4096;
 
@@ -757,7 +761,8 @@ void sm_oid_mgr::SentinelOverwrite(fat_ptr new_obj) {
   fat_ptr *sentinel_node = (fat_ptr *)new_object->GetSentinel().offset();
 
   for (int i = 1; i <= level; i++) {
-    sentinel_node[i] = new_obj;
+    volatile_write(sentinel_node[i], new_obj);
+    //sentinel_node[i] = new_obj;
   }
 }
 /* bool @out 	true if success to submit skip list chain */
@@ -772,8 +777,10 @@ bool sm_oid_mgr::SubmitSkipListChain(fat_ptr new_obj) {
 
   for (int i = 1; i <= level; i++) {
     temp_ptr = volatile_read(sentinel_node[i]);
-    sentinel_node[i] = new_obj;
-    lv_array[i] = temp_ptr;
+    volatile_write(sentinel_node[i], new_obj);
+    volatile_write(lv_array[i], temp_ptr);
+    //sentinel_node[i] = new_obj;
+    //lv_array[i] = temp_ptr;
   }
 
   return true;
@@ -963,19 +970,19 @@ install:
 #endif /* HYU_EVAL */
     // In this case, we have to set v_ridgy
     int go_up = new_object->TossCoin(&seed);
-    uint8_t lv;
+    uint8_t level;
     if (go_up) {
-      lv = old_desc->GetLevel();
-      uint64_t chk = (uint64_t)lv;
+      level = old_desc->GetLevel();
+      uint64_t chk = (uint64_t)level;
       if (chk == MAX_LEVEL)
-        lv = 1;
+        level = 1;
       else
-        lv++;
+        level++;
 
-      new_object->SetLevel(lv);
+      new_object->SetLevel(level);
     } else {
-      lv = 1;
-      new_object->SetLevel(lv);
+      level = 1;
+      new_object->SetLevel(level);
     }
 
     bool submit = SubmitVRidgyChain(new_object, head);
@@ -1376,7 +1383,6 @@ start_over:
   // fclose(fp);
   return nullptr;  // No Visible records
 }
-
 // For tuple arrays only, i.e., entries are guaranteed to point to Objects.
 dbtuple *sm_oid_mgr::oid_get_version_eval(oid_array *oa, OID o,
                                           TXN::xid_context *visitor_xc) {
@@ -1388,14 +1394,14 @@ start_over:
   uint64_t next_gced_cnt = 0;
   uint64_t next_vi_cnt = 0;
   uint64_t next_null_cnt = 0;
-  uint64_t total_next_cnt = 0;
+  //uint64_t total_next_cnt = 0;
   uint64_t v_ridgy_cnt = 0;
   // for tracking
 	int cur_level = 0;
-  printf("start count!\n");
-  FILE* fp_cnt = fopen("chain_count_weaver.data", "a+");
-  fprintf(fp_cnt, "timestamp: %lu\n", visitor_xc->begin);
-  fflush(fp_cnt);
+  //printf("start count!\n");
+  //FILE* fp_cnt = fopen("chain_count_weaver.data", "a+");
+  //fprintf(fp_cnt, "timestamp: %lu\n", visitor_xc->begin);
+  //fflush(fp_cnt);
   while (ptr.offset()) {
     Object *cur_obj = nullptr;
     Object *v_ridgy_obj = nullptr;
@@ -1441,11 +1447,11 @@ start_over:
     }
     if (visible) {
       total_next_cnt = next_null_cnt + next_gced_cnt + next_vi_cnt;
-      fprintf(fp_cnt, "total_next_cnt: %lu\n", total_next_cnt);
+      //fprintf(fp_cnt, "%lu\n", total_next_cnt);
       //printf("%lu\n", total_next_cnt + v_ridgy_cnt);
       //fprintf(fp_cnt, " %lu\n", total_next_cnt + v_ridgy_cnt);
-      fflush(fp_cnt);
-      fclose(fp_cnt);
+      //fflush(fp_cnt);
+      //fclose(fp_cnt);
       return cur_obj->GetPinnedTuple();
     } else {
       v_ridgy_obj = (Object *)tentative_v_ridgy.offset();
@@ -1484,14 +1490,13 @@ start_over:
   }
 
   total_next_cnt = next_null_cnt + next_gced_cnt + next_vi_cnt;
-  fprintf(fp_cnt, "total_next_cnt: %lu at the end\n", total_next_cnt);
+  //fprintf(fp_cnt, "%lu\n", total_next_cnt);
   //printf("%lu at the end\n", total_next_cnt + v_ridgy_cnt);
   // fprintf(fp_cnt, " %lu\n", total_next_cnt + v_ridgy_cnt);
-  fflush(fp_cnt);
-  fclose(fp_cnt);
+  //fflush(fp_cnt);
+  //fclose(fp_cnt);
   return nullptr;  // No Visible records
 }
-
 #ifdef HYU_SKIPLIST /* HYU_SKIPLIST */
 // For tuple arrays only, i.e., entries are guaranteed to point to Objects.
 dbtuple *sm_oid_mgr::oid_get_version_skiplist_eval(oid_array *oa, OID o,
@@ -1500,17 +1505,21 @@ dbtuple *sm_oid_mgr::oid_get_version_skiplist_eval(oid_array *oa, OID o,
 start_over:
   fat_ptr ptr = volatile_read(*entry);
   fat_ptr start_ptr = NULL_PTR;
+  fat_ptr start_prev = NULL_PTR;
   fat_ptr *sentinel = nullptr;
   uint8_t cur_lev = MAX_LEVEL;
   ASSERT(ptr.asi_type() == 0);
   Object *prev_obj = nullptr;
-  uint64_t total_next_cnt = 0;
+  //uint64_t total_next_cnt = 0;
+  uint64_t normal_cnt = 0;
+  uint64_t level_node_cnt = 0;
+  uint64_t sentinel_cnt = 0;
   // for tracking
 	int cur_level = 0;
-  printf("start count!\n");
-  FILE* fp_cnt = fopen("chain_count_skip.data", "a+");
-  fprintf(fp_cnt, "timestamp: %lu\n", visitor_xc->begin);
-  fflush(fp_cnt);
+  //printf("start count!\n");
+  //FILE* fp_cnt = fopen("chain_count_skip.data", "a+");
+  //fprintf(fp_cnt, "timestamp: %lu\n", visitor_xc->begin);
+  //fflush(fp_cnt);
 
   if (ptr.offset()) {
     Object *temp_obj = (Object *)ptr.offset();
@@ -1530,9 +1539,9 @@ start_over:
     }
 
     if (head_visible) {
-      fprintf(fp_cnt, "total_next_cnt: %lu\n",total_next_cnt);
-      fflush(fp_cnt);
-      fclose(fp_cnt);
+      //fprintf(fp_cnt, "%lu\n",total_next_cnt);
+      //fflush(fp_cnt);
+      //fclose(fp_cnt);
       return head_obj->GetPinnedTuple();
     } else {
       return nullptr;
@@ -1543,10 +1552,11 @@ start_over:
   bool start_visible = false;
   bool start_retry = false;
   Object *start_obj = nullptr;
-  for (int i = 1; i <= MAX_LEVEL; i++) {
-    total_next_cnt++;
+  int i;
+  for (i = 1; i <= MAX_LEVEL; i++) {
     start_ptr = volatile_read(sentinel[i]);
     if (start_ptr == NULL_PTR) continue;
+    sentinel_cnt++;
     start_obj = (Object *)start_ptr.offset();
     start_visible = TestVisibility(start_obj, visitor_xc, start_retry);
 
@@ -1563,11 +1573,19 @@ start_over:
       goto start_over;
     }
 
-    if (!start_visible) {
-      ptr = start_ptr;
-      cur_lev = i;
+    if (start_visible) {
+      if (start_prev == NULL_PTR) break;
+      ptr = start_prev;
+      cur_lev = i - 1;
       break;
     }
+    start_prev = start_ptr;
+  }
+
+  if (i == MAX_LEVEL + 1) {
+    ptr = start_prev;
+    start_obj = (Object *)ptr.offset();
+    cur_lev = start_obj->GetLv();
   }
 
   while (ptr.offset()) {
@@ -1611,17 +1629,17 @@ start_over:
       goto start_over;
     }
     if (visible) {
-      total_next_cnt++;
-      fprintf(fp_cnt, "total_next_cnt: %lu\n",total_next_cnt);
-      fflush(fp_cnt);
-      fclose(fp_cnt);
+      total_next_cnt = level_node_cnt + sentinel_cnt + normal_cnt;
+      //fprintf(fp_cnt, "%lu\n", total_next_cnt);
+      //fflush(fp_cnt);
+      //fclose(fp_cnt);
 
       return cur_obj->GetPinnedTuple();
     } else {
       int lv;
       //for (lv = level; lv >= 1; lv--) {
       for (lv = cur_lev; lv >= 1; lv--) {
-        total_next_cnt++;
+        level_node_cnt++;
         tentative_jump = lv_array[lv];
         if (!tentative_jump.offset()) continue;
         Object *temp_obj = (Object *)tentative_jump.offset();
@@ -1652,17 +1670,22 @@ start_over:
       }
 
       if (lv != 0) {
+        normal_cnt++;
         ptr = tentative_jump;
         prev_obj = cur_obj;
+        cur_lev = lv;
         continue;
       }
     }
+    normal_cnt++;
     ptr = tentative_next;
     prev_obj = cur_obj;
+    cur_lev = 1;
   }
-  fprintf(fp_cnt, "total_next_cnt: %lu at the end\n", total_next_cnt);
-  fflush(fp_cnt);
-  fclose(fp_cnt);
+  //fprintf(fp_cnt, "%lu\n", total_next_cnt);
+  //fprintf(fp_cnt, "total_next_cnt: %lu at the end\n", total_next_cnt);
+  //fflush(fp_cnt);
+  //fclose(fp_cnt);
 
   return nullptr;  // No Visible records
 }
@@ -1678,6 +1701,7 @@ dbtuple *sm_oid_mgr::oid_get_version_skiplist(oid_array *oa, OID o,
 start_over:
   fat_ptr ptr = volatile_read(*entry);
   fat_ptr start_ptr = NULL_PTR;
+  fat_ptr start_prev = NULL_PTR;
   fat_ptr *sentinel = nullptr;
   uint8_t cur_lev = MAX_LEVEL;
   ASSERT(ptr.asi_type() == 0);
@@ -1709,7 +1733,8 @@ start_over:
   bool start_visible = false;
   bool start_retry = false;
   Object *start_obj = nullptr;
-  for (int i = 1; i <= MAX_LEVEL; i++) {
+  int i;
+  for (i = 1; i <= MAX_LEVEL; i++) {
     start_ptr = volatile_read(sentinel[i]);
     if (start_ptr == NULL_PTR) continue;
     start_obj = (Object *)start_ptr.offset();
@@ -1728,11 +1753,19 @@ start_over:
       goto start_over;
     }
 
-    if (!start_visible) {
-      ptr = start_ptr;
-      cur_lev = i;
+    if (start_visible) {
+      if (start_prev == NULL_PTR) break;
+      ptr = start_prev;
+      cur_lev = i - 1;
       break;
     }
+    start_prev = start_ptr;
+  }
+
+  if (i == MAX_LEVEL + 1) {
+    ptr = start_prev;
+    start_obj = (Object *)ptr.offset();
+    cur_lev = start_obj->GetLv();
   }
 
   while (ptr.offset()) {
@@ -1813,11 +1846,13 @@ start_over:
       if (lv != 0) {
         ptr = tentative_jump;
         prev_obj = cur_obj;
+        cur_lev = lv;
         continue;
       }
     }
     ptr = tentative_next;
     prev_obj = cur_obj;
+    cur_lev = 1;
   }
 
   return nullptr;  // No Visible records

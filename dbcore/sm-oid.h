@@ -4,7 +4,7 @@
 #include "sm-common.h"
 #include "sm-log.h"
 #include "sm-oid-alloc-impl.h"
-#if defined(HYU_SKIPLIST) || defined(HYU_SKIPLIST_EVAL)
+#if defined(HYU_SKIPLIST) || defined(HYU_SKIPLIST_EVAL) || defined(HYU_VANILLA_EVAL)
 #include "sm-alloc.h"
 #endif
 
@@ -19,6 +19,10 @@ namespace ermia {
 #define SKIPLIST_MAX_LEVEL (256)
 extern thread_local uint64_t seed;
 #endif /* HYU_SKIPLIST */
+
+#if defined(HYU_EVAL_2) || defined(HYU_EVAL_OBJ)
+extern uint64_t total_next_cnt;
+#endif
 
 typedef epoch_mgr::epoch_num epoch_num;
 
@@ -224,16 +228,18 @@ struct sm_oid_mgr {
   dbtuple *oid_get_version(FID f, OID o, TXN::xid_context *visitor_xc);
   dbtuple *oid_get_version(oid_array *oa, OID o, TXN::xid_context *visitor_xc);
 
-#ifdef HYU_EVAL_2 /* HYU_EVAL_2 */
+#if defined(HYU_EVAL_2) || defined(HYU_EVAL_OBJ) /* HYU_EVAL_2 */
   dbtuple *oid_get_version_eval_stack(oid_array *oa, OID o,
                                       TXN::xid_context *visitor_xc);
   dbtuple *oid_get_version_eval(oid_array *oa, OID o,
                                 TXN::xid_context *visitor_xc);
-#endif /* HYU_EVAL_2 */
-
 #ifdef HYU_SKIPLIST /* HYU_SKIPLIST */
   dbtuple *oid_get_version_skiplist_eval(oid_array *oa, OID o,
                                 TXN::xid_context *visitor_xc);
+#endif /* HYU_SKIPLIST */
+#endif /* HYU_EVAL_2 */
+
+#ifdef HYU_SKIPLIST /* HYU_SKIPLIST */
   dbtuple *oid_get_version_skiplist(oid_array *oa, OID o,
                                     TXN::xid_context *visitor_xc);
   dbtuple *oid_get_version_skiplist_from_ver(fat_ptr ver,

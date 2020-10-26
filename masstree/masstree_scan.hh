@@ -506,7 +506,9 @@ int basic_table<P>::scan_eval(H helper, Str firstkey, bool emit_firstkey,
       if (ermia::config::is_backup_srv()) {
         v = ermia::oidmgr->BackupGetVersion(tuple_array_, pdest_array_, o, xc);
       } else {
-        if (scan_flag == 1)  // vridgy_only
+        if (scan_flag == 3)
+          v = ermia::oidmgr->oid_get_version_skiplist(tuple_array_, o, xc);
+				else if (scan_flag == 1)  // vridgy_only
           v = ermia::oidmgr->oid_get_version_zigzag(tuple_array_, o, xc);
         else if (scan_flag == 0)  // vanilla
           v = ermia::oidmgr->oid_get_version(tuple_array_, o, xc);
@@ -594,11 +596,6 @@ int basic_table<P>::scan(H helper, Str firstkey, bool emit_firstkey, F &scanner,
       } else {
 #ifdef HYU_SKIPLIST /* HYU_SKIPLIST */
         v = ermia::oidmgr->oid_get_version_skiplist(tuple_array_, o, xc);
-        // for debug
-				ermia::dbtuple *v_check = NULL;
-				v_check = ermia::oidmgr->oid_get_version(tuple_array_, o, xc);
-				if (v_check != v)
-					printf("NOOOOOO\n");
 #else /* HYU_SKIPLIST */
         v = ermia::oidmgr->oid_get_version(tuple_array_, o, xc);
 #endif /* HYU_SKIPLIST */
@@ -649,7 +646,7 @@ int basic_table<P>::scan_eval(Str firstkey, bool emit_firstkey, F &scanner,
                               ermia::TXN::xid_context *xc, threadinfo &ti,
                               bool is_primary_idx, int scan_flag) const {
   // scan_flag	0: vanilla, 1: vridgy_only, 2:vweaver
-  if (scan_flag == 0 || scan_flag == 1) {
+  if (scan_flag == 0 || scan_flag == 1 || scan_flag == 3) {
     return scan_eval(forward_scan_helper(), firstkey, emit_firstkey, scanner,
                      xc, ti, scan_flag);
   } else {

@@ -58,7 +58,7 @@ uint64_t safesnap_lsn = 0;
 thread_local TlsFreeObjectPool *tls_free_object_pool CACHE_ALIGNED;
 char **node_memory = nullptr;
 uint64_t *allocated_node_memory = nullptr;
-#if defined(HYU_SKIPLIST) || defined(HYU_SKIPLIST_EVAL)
+#if defined(HYU_SKIPLIST) || defined(HYU_SKIPLIST_EVAL) || defined(HYU_VANILLA_EVAL)
 uint64_t memuse = 0;
 #endif
 static uint64_t thread_local tls_allocated_node_memory CACHE_ALIGNED;
@@ -161,8 +161,8 @@ void gc_version_chain(fat_ptr *oid_entry) {
     }
   }
 }
-#elif defined(HYU_SKIPLIST) /* HYU_SKIPLIST */
-void gc_version_chain(fat_ptr *oid_entry) {
+/*#elif defined(HYU_SKIPLIST)
+void gc_version_chain_skiplist(fat_ptr *oid_entry) {
   fat_ptr ptr = *oid_entry;
   Object *cur_obj = (Object *)ptr.offset();
   dbtuple *candidate = nullptr;
@@ -213,7 +213,7 @@ void gc_version_chain(fat_ptr *oid_entry) {
         ALWAYS_ASSERT(LSN::from_ptr(clsn).offset() <= glsn);
         fat_ptr next_ptr = cur_obj->GetNextVolatile();
         cur_obj->SetSentinel(NULL_PTR);
-        cur_obj->SetLevel(0);
+        cur_obj->SetLv(0);
         cur_obj->rec_id = 0;
         if (!tls_free_object_pool) {
           tls_free_object_pool = new TlsFreeObjectPool;
@@ -225,7 +225,7 @@ void gc_version_chain(fat_ptr *oid_entry) {
     }
   }
 }
-
+*/
 #else  /* HYU_VWEAVER */
 void gc_version_chain(fat_ptr *oid_entry) {
   fat_ptr ptr = *oid_entry;
@@ -362,7 +362,7 @@ void *allocate_onnode(size_t size) {
   auto node = numa_node_of_cpu(sched_getcpu());
   ALWAYS_ASSERT(node < config::numa_nodes);
   auto offset = __sync_fetch_and_add(&allocated_node_memory[node], size);
-#if defined(HYU_SKIPLIST) || defined(HYU_SKIPLIST_EVAL)
+#if defined(HYU_SKIPLIST) || defined(HYU_SKIPLIST_EVAL) || defined(HYU_VANILLA_EVAL)
   memuse = allocated_node_memory[node] / config::MB;
 #endif
   if (likely(offset + size <= config::node_memory_gb * config::GB)) {

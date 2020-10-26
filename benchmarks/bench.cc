@@ -430,6 +430,9 @@ void bench_runner::start_measurement() {
 #elif defined(HYU_SKIPLIST_EVAL)
   FILE *skip_throughput = fopen("frug_throughput.data", "a+");
   FILE *skip_fp = fopen("frug_memuse.data", "a+");
+#elif defined(HYU_VANILLA_EVAL)
+  FILE *skip_throughput = fopen("vanilla_throughput.data", "a+");
+  FILE *skip_fp = fopen("vanilla_memuse.data", "a+");
 #endif
   workers = make_workers();
   ALWAYS_ASSERT(!workers.empty());
@@ -531,12 +534,12 @@ void bench_runner::start_measurement() {
       printf("%lu,%lu,%lu\n", slept + 1, sec_commits, sec_aborts);
 #if defined(HYU_MOTIVATION)
       fprintf(fp, "%lu,%lu,%lu\n", slept + 1, sec_commits, sec_aborts);
-#elif defined(HYU_SKIPLIST) || defined(HYU_SKIPLIST_EVAL)
+#elif defined(HYU_SKIPLIST) || defined(HYU_SKIPLIST_EVAL) || defined(HYU_VANILLA_EVAL)
       fprintf(skip_throughput, "%lu,%lu\n", slept + 1, sec_commits);
       fflush(skip_throughput);
       if ((slept + 1) % 10 == 0) {
-        printf("%lu,%lu\n", slept + 1, ermia::MM::memuse);
-        fprintf(skip_fp, "%lu,%lu\n", slept + 1, ermia::MM::memuse);
+        printf("%lu,%lu,%lu\n", slept + 1, ermia::MM::memuse, ermia::update_count);
+        fprintf(skip_fp, "%lu,%lu,%lu\n", slept + 1, ermia::MM::memuse, ermia::update_count);
         fflush(skip_fp);
       }
 #endif
@@ -738,7 +741,7 @@ void bench_runner::start_measurement() {
 #ifdef HYU_MOTIVATION /* HYU_MOTIVATION */
   fclose(fp);
 #endif /* HYU_MOTIVATION */
-#if defined(HYU_SKIPLIST) || defined(HYU_SKIPLIST_EVAL)
+#if defined(HYU_SKIPLIST) || defined(HYU_SKIPLIST_EVAL) || defined(HYU_VANILLA_EVAL)
   fclose(skip_fp);
   fclose(skip_throughput);
 #endif

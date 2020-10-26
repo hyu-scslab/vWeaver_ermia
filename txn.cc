@@ -26,6 +26,10 @@ std::vector<double> v;
 std::vector<double> k;
 #endif /* HYU_EVAL */
 
+#if defined(HYU_SKIPLIST) || defined(HYU_SKIPLIST_EVAL) || defined(HYU_VANILLA_EVAL)
+uint64_t update_count = 0;
+#endif
+
 transaction::transaction(uint64_t flags, str_arena &sa)
     : flags(flags), sa(&sa) {
   if (!(flags & TXN_FLAG_CMD_REDO) && config::is_backup_srv()) {
@@ -1546,6 +1550,9 @@ rc_t transaction::Update(IndexDescriptor *index_desc, OID oid, const varstr *k,
                             DEFAULT_ALIGNMENT_BITS);
       }
     }
+#if defined(HYU_SKIPLIST) || defined(HYU_SKIPLIST_EVAL) || defined(HYU_VANILLA_EVAL)
+    update_count++;
+#endif
     return rc_t{RC_TRUE};
   } else {  // somebody else acted faster than we did
     return rc_t{RC_ABORT_SI_CONFLICT};
@@ -1568,16 +1575,11 @@ OID transaction::PrepareInsert(OrderedIndex *index, varstr *value,
     ASSERT(decode_size_aligned(new_head.size_code()) >= (*out_tuple)->size);
     (*out_tuple)->GetObject()->SetClsn(xid.to_ptr());
     oid = oidmgr->alloc_oid(tuple_fid);
-#ifdef HYU_VWEAVER /* HYU_VWEAVER */
+#if defined(HYU_VWEAVER) || defined(HYU_SKIPLIST) /* HYU_VWEAVER */
     Object *new_head_obj = (Object *)new_head.offset();
     new_head_obj->rec_id = oid;
 #endif /* HYU_VWEAVER */
 
-#ifdef HYU_SKIPLIST /* HYU_SKIPLIST */
-    // make record sentinel and sentinel clsn array for skiplist
-    Object *new_head_obj = (Object *)new_head.offset();
-    new_head_obj->rec_id = oid;
-#endif /* HYU_SKIPLIST */
     // [HYU]
     __sync_synchronize();
     // [HYU] end

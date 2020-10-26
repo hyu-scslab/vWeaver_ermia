@@ -223,7 +223,7 @@ class ConcurrentMasstreeIndex : public OrderedIndex {
 
   inline void *GetTable() override { return masstree_.get_table(); }
 
-#ifdef HYU_EVAL_2 /* HYU_EVAL_2 */
+#if defined(HYU_EVAL_2) || defined(HYU_EVAL_OBJ) /* HYU_EVAL_2 */
   virtual void Get_eval(transaction *t, rc_t &rc, const varstr &key,
                         varstr &value, int flag,
                         OID *out_oid = nullptr) override;

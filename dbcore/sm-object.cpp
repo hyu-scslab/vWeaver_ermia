@@ -106,7 +106,7 @@ void Object::Pin(bool load_from_logbuf) {
 
 #ifdef HYU_SKIPLIST /* HYU_SKIPLIST */
 void Object::AllocLvPointer() {
-  size_t size = sizeof(fat_ptr) * (GetLevel() + 1);
+  size_t size = sizeof(fat_ptr) * (GetLv() + 1);
   fat_ptr *lv_pointer = (fat_ptr *)MM::allocate(size);
   size_t size_code = encode_size_aligned(size);
   ASSERT(size_code != INVALID_SIZE_CODE);

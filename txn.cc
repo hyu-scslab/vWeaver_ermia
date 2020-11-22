@@ -191,8 +191,8 @@ void transaction::Abort() {
     obj->SetClsn(NULL_PTR);
     ASSERT(obj->GetAllocateEpoch() == xc->begin_epoch);
 #ifdef HYU_SKIPLIST /* HYU_SKIPLIST */
-    if (obj->GetSentinel() != NULL_PTR) {
-      MM::deallocate(obj->GetLvPointer());
+    if (obj->GetSentinel() != NULL_PTR && obj->GetLvPointer() != NULL_PTR) {
+      //MM::deallocate_skipilst(obj->GetLvPointer());
     }
 #endif /* HYU_SKIPLIST */
     MM::deallocate(entry);

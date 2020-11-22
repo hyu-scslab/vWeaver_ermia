@@ -110,6 +110,9 @@ struct thread_data {
 void prepare_node_memory();
 void *allocate(size_t size);
 void deallocate(fat_ptr p);
+#ifdef HYU_SKIPLIST /* HYU_SKIPLIST */
+void deallocate_skiplist(fat_ptr p);
+#endif /* HYU_SKIPLIST */
 void *allocate_onnode(size_t size);
 epoch_mgr::tls_storage *get_tls(void *);
 void global_init(void *);

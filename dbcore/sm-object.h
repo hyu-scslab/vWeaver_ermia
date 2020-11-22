@@ -5,8 +5,13 @@
 #include "sm-common.h"
 
 namespace ermia {
-
+#ifdef HYU_VWEAVER /* HYU_VWEAVER */
 #define MAX_LEVEL (255)
+#endif /* HYU_VWEAVER */
+
+#ifdef HYU_SKIPLIST /* HYU_SKIPLIST */
+#define MAX_LEVEL (32)
+#endif /* HYU_SKIPLIST */
 
 struct dbtuple;
 class sm_log_recover_mgr;
@@ -72,12 +77,14 @@ class Object {
 #endif /* HYU_VWEAVER */
 
 #ifdef HYU_SKIPLIST /* HYU_SKIPLIST */
-  fat_ptr sentinel_;
   fat_ptr lv_pointer_;
   uint8_t lv_;
 #endif /* HYU_SKIPLIST */
 
  public:
+#ifdef HYU_SKIPLIST /* HYU_SKIPLIST */
+  fat_ptr sentinel_;
+#endif /* HYU_SKIPLIST */
   static fat_ptr Create(const varstr* tuple_value, bool do_write,
                         epoch_num epoch);
 
@@ -89,9 +96,9 @@ class Object {
         next_volatile_(NULL_PTR),
 #ifdef HYU_SKIPLIST /* HYU_SKIPLIST */
         clsn_(NULL_PTR),
-        sentinel_(NULL_PTR),
         lv_pointer_(NULL_PTR),
-        lv_(0) {}
+        lv_(0),
+        sentinel_(NULL_PTR) {}
 #else /* HYU_SKIPLIST */
         //clsn_(NULL_PTR),
         //HYU_candidate_glsn(0) {}
@@ -106,9 +113,9 @@ class Object {
         next_volatile_(NULL_PTR),
 #ifdef HYU_SKIPLIST /* HYU_SKIPLIST */
         clsn_(NULL_PTR),
-        sentinel_(NULL_PTR),
         lv_pointer_(NULL_PTR),
-        lv_(0) {}
+        lv_(0),
+        sentinel_(NULL_PTR) {}
 #else /* HYU_SKIPLIST */
         //clsn_(NULL_PTR),
         //HYU_candidate_glsn(0) {}

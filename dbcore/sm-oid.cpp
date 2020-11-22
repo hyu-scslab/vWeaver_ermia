@@ -760,9 +760,11 @@ void sm_oid_mgr::SentinelOverwrite(fat_ptr new_obj) {
   uint8_t level = new_object->GetLv();
   fat_ptr *sentinel_node = (fat_ptr *)new_object->GetSentinel().offset();
 
-  for (int i = 1; i <= level; i++) {
-    volatile_write(sentinel_node[i], new_obj);
-    //sentinel_node[i] = new_obj;
+  if (level >= 2) {
+    for (int i = 0; i <= level - 2; i++) {
+      volatile_write(sentinel_node[i], new_obj);
+      //sentinel_node[i] = new_obj;
+    }
   }
 }
 /* bool @out 	true if success to submit skip list chain */
@@ -775,12 +777,14 @@ bool sm_oid_mgr::SubmitSkipListChain(fat_ptr new_obj) {
   fat_ptr *lv_array = (fat_ptr *)lv_ptr.offset();
   uint64_t watermark = volatile_read(MM::gc_lsn);
 
-  for (int i = 1; i <= level; i++) {
-    temp_ptr = volatile_read(sentinel_node[i]);
-    volatile_write(sentinel_node[i], new_obj);
-    volatile_write(lv_array[i], temp_ptr);
-    //sentinel_node[i] = new_obj;
-    //lv_array[i] = temp_ptr;
+  if (level >= 2) {
+    for (int i = 0; i <= level - 2; i++) {
+      temp_ptr = volatile_read(sentinel_node[i]);
+      volatile_write(sentinel_node[i], new_obj);
+      volatile_write(lv_array[i], temp_ptr);
+      //sentinel_node[i] = new_obj;
+      //lv_array[i] = temp_ptr;
+  }
   }
 
   return true;
@@ -895,36 +899,42 @@ install:
     // make sentinel
     size_t size = sizeof(fat_ptr) * SKIPLIST_MAX_LEVEL;
     fat_ptr *sentinel_ptr = (fat_ptr *)MM::allocate(size);
-    memset(sentinel_ptr, 0, size);
+    //memset(sentinel_ptr, 0, size);
+    for (int i = 0; i < SKIPLIST_MAX_LEVEL; i++) {
+      sentinel_ptr[i] = NULL_PTR;
+    }
     size_t size_code = encode_size_aligned(size);
     ASSERT(size_code != INVALID_SIZE_CODE);
     fat_ptr sentinel = fat_ptr::make(sentinel_ptr, size_code, 0);
 
-    old_desc->SetSentinel(sentinel);
+    if (__sync_bool_compare_and_swap(&old_desc->sentinel_._ptr, 0, sentinel._ptr)) {
+    //old_desc->SetSentinel(sentinel);
 
-    // Decide level
-    uint8_t lv = 1;
-    while (1) {
-      int go_up = old_desc->TossCoin2(&seed);
+      // Decide level
+      uint8_t lv = 1;
+      while (1) {
+        int go_up = old_desc->TossCoin2(&seed);
 
-      if (go_up) {
-        lv++;
-        uint64_t chk = (uint64_t)lv;
-        if (chk == MAX_LEVEL) {
+        if (go_up) {
+          lv++;
+          uint64_t chk = (uint64_t)lv;
+          if (chk == MAX_LEVEL) {
+            old_desc->SetLv(lv);
+            old_desc->AllocLvPointer();
+            break;
+          }
+        } else {
           old_desc->SetLv(lv);
           old_desc->AllocLvPointer();
-					break;
+          break;
         }
-      } else {
-        old_desc->SetLv(lv);
-        old_desc->AllocLvPointer();
-        break;
       }
+
+      // submit chain
+      bool submit = oidmgr->SubmitSkipListChain(head);
+    } else {
+      MM::deallocate_skiplist(sentinel);
     }
-
-    // submit chain
-    bool submit = oidmgr->SubmitSkipListChain(head);
-
   }
 #endif /* HYU_SKIPLIST */
   // HYU_GC
@@ -1041,8 +1051,9 @@ install:
       }
       return head;
     } else {
-#ifdef HYU_SKIPLIST /* HYU_SKIPLIST */
-			MM::deallocate(new_object->GetLvPointer());
+#ifdef HYU_SKIPLIST /* HYU_SKIPLIST */'
+      if (new_object->GetLv() >= 2)
+        MM::deallocate(new_object->GetLvPointer());
 #endif /* HYU_SKIPLIST */
       MM::deallocate(*new_obj_ptr);
     }
@@ -1552,37 +1563,35 @@ start_over:
   bool start_visible = false;
   bool start_retry = false;
   Object *start_obj = nullptr;
+  zero_flag = false;
   int i;
-  for (i = 1; i <= MAX_LEVEL; i++) {
+  for (i = 0; i < MAX_LEVEL; i++) {
+    if (!zero_flag) {
+      start_obj = (Object *)ptr.offset();
+      start_visible = TestVisibility(start_obj, visitor_xc, start_retry);
+      if (start_retry) {
+        goto start_over;
+      }
+      zero_flag = true;
+      start_prev = ptr;
+    }
     start_ptr = volatile_read(sentinel[i]);
     if (start_ptr == NULL_PTR) continue;
     sentinel_cnt++;
     start_obj = (Object *)start_ptr.offset();
     start_visible = TestVisibility(start_obj, visitor_xc, start_retry);
 
-    // is GCed?
-    /*if ((start_ptr != ptr && start_obj->GetClsn().offset().asi_type() != fat_ptr::ASI_LOG) ||
-        LSN::from_ptr(start_obj->GetClsn()).offset() >=
-        LSN::from_ptr(cur_obj->GetClsn()).offset()) {
-      break;
-    }*/
-
     if (start_retry && start_obj->GetClsn().offset() == 0) break;
 
-    if (start_retry) {
-      goto start_over;
-    }
-
     if (start_visible) {
-      if (start_prev == NULL_PTR) break;
       ptr = start_prev;
-      cur_lev = i - 1;
+      cur_lev = i + 1;
       break;
     }
     start_prev = start_ptr;
   }
 
-  if (i == MAX_LEVEL + 1) {
+  if (i == MAX_LEVEL) {
     ptr = start_prev;
     start_obj = (Object *)ptr.offset();
     cur_lev = start_obj->GetLv();
@@ -1636,45 +1645,34 @@ start_over:
 
       return cur_obj->GetPinnedTuple();
     } else {
-      int lv;
-      //for (lv = level; lv >= 1; lv--) {
-      for (lv = cur_lev; lv >= 1; lv--) {
-        level_node_cnt++;
-        tentative_jump = lv_array[lv];
-        if (!tentative_jump.offset()) continue;
-        Object *temp_obj = (Object *)tentative_jump.offset();
-        fat_ptr temp_clsn = temp_obj->GetClsn();
+      int lv = 1;
+      bool temp_visible = true;
+      if (cur_lev >= 2) {
+        for (lv = cur_lev - 2; lv >= 0; lv--) {
+          level_node_cnt++;
+          tentative_jump = lv_array[lv];
+          if (!tentative_jump.offset()) continue;
+          Object *temp_obj = (Object *)tentative_jump.offset();
+          fat_ptr temp_clsn = temp_obj->GetClsn();
 
-        // is GCed?
-        if (temp_clsn.asi_type() != fat_ptr::ASI_LOG ||
-            LSN::from_ptr(temp_clsn).offset() >=
-            LSN::from_ptr(cur_obj->GetClsn()).offset()) {
-          ptr = tentative_next;
+          bool temp_retry = false;
+          temp_visible = TestVisibility(temp_obj, visitor_xc, temp_retry);
+
+          if (temp_retry && temp_obj->GetClsn().offset() == 0) {
+            lv = 0;
+            break;
+          }
+
+          if (!temp_visible) break;
+        }
+
+        if (!temp_visible) {
+          normal_cnt++;
+          ptr = tentative_jump;
           prev_obj = cur_obj;
+          cur_lev = lv + 2;
           continue;
         }
-
-        bool temp_retry = false;
-        bool temp_visible = TestVisibility(temp_obj, visitor_xc, temp_retry);
-
-        if (temp_retry && temp_obj->GetClsn().offset() == 0) {
-          lv = 0;
-          break;
-        }
-
-				if (temp_retry) {
-          goto start_over;
-        }
-
-        if (!temp_visible) break;
-      }
-
-      if (lv != 0) {
-        normal_cnt++;
-        ptr = tentative_jump;
-        prev_obj = cur_obj;
-        cur_lev = lv;
-        continue;
       }
     }
     normal_cnt++;
@@ -1733,36 +1731,34 @@ start_over:
   bool start_visible = false;
   bool start_retry = false;
   Object *start_obj = nullptr;
+  bool zero_flag = false;
   int i;
-  for (i = 1; i <= MAX_LEVEL; i++) {
+  for (i = 0; i < MAX_LEVEL; i++) {
+    if (!zero_flag) {
+      start_obj = (Object *)ptr.offset();
+      start_visible = TestVisibility(start_obj, visitor_xc, start_retry);
+      if (start_retry) {
+        goto start_over;
+      }
+      zero_flag = true;
+      start_prev = ptr;
+    }
     start_ptr = volatile_read(sentinel[i]);
     if (start_ptr == NULL_PTR) continue;
     start_obj = (Object *)start_ptr.offset();
     start_visible = TestVisibility(start_obj, visitor_xc, start_retry);
 
-    // is GCed?
-    /*if ((start_ptr != ptr && start_obj->GetClsn().offset().asi_type() != fat_ptr::ASI_LOG) ||
-        LSN::from_ptr(start_obj->GetClsn()).offset() >=
-        LSN::from_ptr(cur_obj->GetClsn()).offset()) {
-      break;
-    }*/
-
     if (start_retry && start_obj->GetClsn().offset() == 0) break;
 
-    if (start_retry) {
-      goto start_over;
-    }
-
     if (start_visible) {
-      if (start_prev == NULL_PTR) break;
       ptr = start_prev;
-      cur_lev = i - 1;
+      cur_lev = i + 1;
       break;
     }
     start_prev = start_ptr;
   }
 
-  if (i == MAX_LEVEL + 1) {
+  if (i == MAX_LEVEL) {
     ptr = start_prev;
     start_obj = (Object *)ptr.offset();
     cur_lev = start_obj->GetLv();
@@ -1811,43 +1807,33 @@ start_over:
     if (visible) {
       return cur_obj->GetPinnedTuple();
     } else {
-      int lv;
-      //for (lv = level; lv >= 1; lv--) {
-      for (lv = cur_lev; lv >= 1; lv--) {
-        tentative_jump = lv_array[lv];
-        if (!tentative_jump.offset()) continue;
-        Object *temp_obj = (Object *)tentative_jump.offset();
-        fat_ptr temp_clsn = temp_obj->GetClsn();
+      int lv = 1;
+      bool temp_visible = true;
+      if (cur_lev >= 2) {
+        for (lv = cur_lev - 2; lv >= 0; lv--) {
+          if (level - 2 < lv) continue;
+          tentative_jump = lv_array[lv];
+          if (!tentative_jump.offset()) continue;
+          Object *temp_obj = (Object *)tentative_jump.offset();
+          fat_ptr temp_clsn = temp_obj->GetClsn();
 
-        // is GCed?
-        if (temp_clsn.asi_type() != fat_ptr::ASI_LOG ||
-            LSN::from_ptr(temp_clsn).offset() >=
-            LSN::from_ptr(cur_obj->GetClsn()).offset()) {
-          ptr = tentative_next;
+          bool temp_retry = false;
+          temp_visible = TestVisibility(temp_obj, visitor_xc, temp_retry);
+
+          if (temp_retry && temp_obj->GetClsn().offset() == 0) {
+            lv = 0;
+            break;
+          }
+
+          if (!temp_visible) break;
+        }
+
+        if (!temp_visible) {
+          ptr = tentative_jump;
           prev_obj = cur_obj;
+          cur_lev = lv + 2;
           continue;
         }
-
-        bool temp_retry = false;
-        bool temp_visible = TestVisibility(temp_obj, visitor_xc, temp_retry);
-
-        if (temp_retry && temp_obj->GetClsn().offset() == 0) {
-          lv = 0;
-          break;
-        }
-
-				if (temp_retry) {
-          goto start_over;
-        }
-
-        if (!temp_visible) break;
-      }
-
-      if (lv != 0) {
-        ptr = tentative_jump;
-        prev_obj = cur_obj;
-        cur_lev = lv;
-        continue;
       }
     }
     ptr = tentative_next;

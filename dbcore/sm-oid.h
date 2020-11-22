@@ -16,7 +16,7 @@
 namespace ermia {
 
 #ifdef HYU_SKIPLIST /* HYU_SKIPLIST */
-#define SKIPLIST_MAX_LEVEL (256)
+#define SKIPLIST_MAX_LEVEL (32)
 extern thread_local uint64_t seed;
 #endif /* HYU_SKIPLIST */
 
@@ -333,7 +333,7 @@ struct sm_oid_mgr {
     // once when tuple insertion occurs, so we can deallocate in fail case only
     // this point.
     if (head_obj->GetSentinel() != NULL_PTR && head_obj->GetNextVolatile() == NULL_PTR) {
-		  MM::deallocate(head_obj->GetSentinel());
+		  MM::deallocate_skiplist(head_obj->GetSentinel());
     }
 #endif /* HYU_SKIPLIST */
     __sync_synchronize();
